@@ -271,6 +271,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "macroquad-virtual-joystick"
+version = "0.2.0"
+source = "git+https://github.com/kaller01/macroquad-virtual-joystick?branch=bug_fix_missing_angle#d0948a448fb19ba2a02af2d5c86541a3438d7d45"
+dependencies = [
+ "macroquad",
+]
+
+[[package]]
 name = "macroquad_macro"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -550,6 +558,7 @@ version = "0.1.0"
 dependencies = [
  "bracket-noise",
  "macroquad",
+ "macroquad-virtual-joystick",
  "noise",
 ]
 

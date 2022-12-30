@@ -5,6 +5,8 @@ pub mod player;
 pub mod world;
 use crate::world::World;
 
+use macroquad_virtual_joystick::Joystick;
+
 #[macroquad::main("2D")]
 async fn main() {
     let mut target = vec2(0., 0.);
@@ -15,11 +17,19 @@ async fn main() {
 
     let mut world = World::generate();
     let mut player = Player::new(0., 0.);
+    let mut joystick = Joystick::new(screen_width() * 0.8, screen_height() * 0.8, 200.0);
 
-    
+    let mut screen_size = (screen_width(), screen_height());
 
     loop {
         clear_background(LIGHTGRAY);
+
+        if screen_size != (screen_width(), screen_height()) {
+            screen_size = (screen_width(), screen_height());
+            joystick = Joystick::new(screen_width() * 0.8, screen_height() * 0.8, 200.0);
+        }
+
+        // joystick.set_center(screen_width() * 0.8, screen_height() * 0.8);
 
         //Handle camera controlls
         {
@@ -49,7 +59,7 @@ async fn main() {
                 camera_follow_player = true;
             }
         }
-    
+
         //handle player controlls
         {
             let speed = 20.;
@@ -67,6 +77,18 @@ async fn main() {
                 velocity.y = -speed;
             }
             player.set_velocity(velocity);
+
+            //Joystick
+            {
+                let joystick_event = joystick.update();
+                println!("{:?}, {:?}", joystick_event.direction.to_local(), joystick_event.intensity);
+                player.set_velocity(
+                    joystick_event.direction.to_local()
+                        * joystick_event.intensity
+                        * speed
+                        * vec2(1., -1.),
+                );
+            }
 
             if camera_follow_player {
                 target = player.get_position();
@@ -87,13 +109,13 @@ async fn main() {
         if z < MAX_ZOOM {
             z = MAX_ZOOM;
         }
-        let zoom = vec2(z, z *(screen_width() / screen_height()));
+        let zoom = vec2(z, z * (screen_width() / screen_height()));
         let size = 1. / zoom * 2.;
         let corner = target - size / 2.;
         let view = Rect::new(corner.x, corner.y, size.x, size.y);
 
         if is_key_pressed(KeyCode::G) {
-            generate_terrain = !generate_terrain;   
+            generate_terrain = !generate_terrain;
         }
         if generate_terrain {
             world.generate_at(view);
@@ -111,6 +133,8 @@ async fn main() {
         }
 
         set_default_camera();
+        joystick.render();
+
         draw_text(
             "ARROWS to move player (purple circle)",
             30.0,
@@ -121,13 +145,7 @@ async fn main() {
         draw_text("Q-E to zoom camera", 30.0, 60.0, 30.0, BLACK);
         draw_text("WASD to move camera", 30.0, 90.0, 30.0, BLACK);
         draw_text("F to follow player", 30.0, 120.0, 30.0, BLACK);
-        draw_text(
-            "G to toggle generation",
-            30.0,
-            150.0,
-            30.0,
-            BLACK,
-        );
+        draw_text("G to toggle generation", 30.0, 150.0, 30.0, BLACK);
         if z <= MAX_ZOOM {
             draw_text("Max zoom reached, pink is camera border, see the chunks load in and out as you move camera", 30.0, screen_height()*0.95, 30.0, BLACK);
         }

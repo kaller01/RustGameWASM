@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 bracket-noise = "0.8.7"
 macroquad = "0.3"
+noise = "0.8.2"

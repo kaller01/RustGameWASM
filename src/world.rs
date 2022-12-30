@@ -1,15 +1,15 @@
 use crate::player::Entity;
 // use bracket_noise::prelude::*;
 use macroquad::prelude::*;
-use std::{collections::HashMap};
-use noise::{OpenSimplex, NoiseFn, SuperSimplex};
+use noise::{Fbm, MultiFractal, NoiseFn, OpenSimplex};
+use std::collections::HashMap;
 
 const CHUNK_SIZE: i32 = 8;
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 pub struct Coords {
     x: i32,
-    y: i32
+    y: i32,
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
@@ -120,32 +120,18 @@ pub struct Chunk {
     pos: ChunkPosition,
 }
 
-// pub trait NoiseGenerator {
-//     fn generate(&self, x: f32, y: f32) -> f32;
-// }
-
-// impl NoiseGenerator for SuperSimplex {
-//     fn generate(&self, x: f32, y: f32) -> f32 {
-//         todo!()
-//     }
-// }
-
 pub struct World {
     chunks: HashMap<ChunkPosition, Chunk>,
-    noise: SuperSimplex,
+    noise: Fbm<OpenSimplex>,
 }
 
 impl World {
     pub fn generate() -> World {
-        // let mut noise = FastNoise::seeded(0);
-        let noise = SuperSimplex::new(0);
-
-        // noise.set_noise_type(NoiseType::SimplexFractal);
-        // noise.set_fractal_type(FractalType::FBM);
-        // noise.set_fractal_octaves(5);
-        // noise.set_fractal_gain(0.6);
-        // noise.set_fractal_lacunarity(2.0);
-        // noise.set_frequency(2.0);
+        let noise = Fbm::<OpenSimplex>::new(0)
+            .set_frequency(0.01)
+            .set_persistence(0.6)
+            .set_lacunarity(2.0)
+            .set_octaves(5);
 
         let x1 = -10;
         let y1 = -10;
@@ -242,7 +228,7 @@ impl World {
             Some(tile) => match tile.interaction {
                 TileInteraction::Block => (),
                 TileInteraction::Walkable => (),
-                TileInteraction::Swimmable => velocity*=0.2,
+                TileInteraction::Swimmable => velocity *= 0.2,
             },
             None => (),
         }
@@ -304,14 +290,14 @@ impl Chunk {
         //     RED,
         // );
     }
-    pub fn generate(chunk_pos: ChunkPosition, noise: &SuperSimplex) -> Chunk {
+    pub fn generate(chunk_pos: ChunkPosition, noise: &Fbm<OpenSimplex>) -> Chunk {
         let mut tiles: [[Tile; CHUNK_SIZE as usize]; CHUNK_SIZE as usize] = Default::default();
 
         for x in 0..CHUNK_SIZE {
             for y in 0..CHUNK_SIZE {
                 let pos = Coords::from_position_at(&chunk_pos, (x, y)).to_vec2();
                 // let n = (noise.get([pos.x / 300., pos.y / 300.]) + 1.) * 0.5;
-                let n = (noise.get([(pos.x/100.) as f64, (pos.y/100.) as f64])+1.)*0.5;
+                let n = (noise.get([(pos.x) as f64, (pos.y) as f64]) + 1.) * 0.5;
                 tiles[x as usize][y as usize] = Tile::generate(n);
             }
         }

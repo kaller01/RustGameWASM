@@ -10,11 +10,13 @@ async fn main() {
     let mut target = vec2(0., 0.);
     let mut z = 0.05;
     let mut camera_follow_player = true;
+    const MAX_ZOOM: f32 = 0.01;
+    let mut generate_terrain = true;
 
     let mut world = World::generate();
     let mut player = Player::new(0., 0.);
 
-    const MAX_ZOOM: f32 = 0.01;
+    
 
     loop {
         clear_background(LIGHTGRAY);
@@ -76,6 +78,7 @@ async fn main() {
         set_camera(&Camera2D {
             target: target,
             zoom: zoom,
+            // viewport: Some((0,0,(screen_width()/2.).round() as i32,screen_height().round() as i32)),
             ..Default::default()
         });
 
@@ -84,12 +87,15 @@ async fn main() {
         if z < MAX_ZOOM {
             z = MAX_ZOOM;
         }
-        let zoom = vec2(z, z * (screen_width() / screen_height()));
+        let zoom = vec2(z, z *(screen_width() / screen_height()));
         let size = 1. / zoom * 2.;
         let corner = target - size / 2.;
         let view = Rect::new(corner.x, corner.y, size.x, size.y);
 
         if is_key_pressed(KeyCode::G) {
+            generate_terrain = !generate_terrain;   
+        }
+        if generate_terrain {
             world.generate_at(view);
         }
 
@@ -116,7 +122,7 @@ async fn main() {
         draw_text("WASD to move camera", 30.0, 90.0, 30.0, BLACK);
         draw_text("F to follow player", 30.0, 120.0, 30.0, BLACK);
         draw_text(
-            "G to procedurally generate (fill in red)",
+            "G to toggle generation",
             30.0,
             150.0,
             30.0,

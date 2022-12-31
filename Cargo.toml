@@ -6,7 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bracket-noise = "0.8.7"
-macroquad = "0.3"
+macroquad = "0.3.25"
 macroquad-virtual-joystick = { git = "https://github.com/kaller01/macroquad-virtual-joystick", branch = "bug_fix_missing_angle" }
 noise = "0.8.2"

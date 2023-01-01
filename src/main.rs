@@ -9,6 +9,9 @@ pub mod multiplayer;
 pub mod player;
 pub mod world;
 
+#[macro_use]
+extern crate lazy_static;
+
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
 #[cfg(target_arch = "wasm32")]

@@ -51,8 +51,6 @@ pub extern "C" fn update_player(
     let mut name = String::new();
     js_object.to_string(&mut name);
 
-    miniquad::debug!("{}", &name);
-
     let event = Event::PlayerUpdate {
         name,
         id,

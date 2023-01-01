@@ -10,3 +10,4 @@ lazy_static = "1.4.0"
 macroquad = "0.3.25"
 macroquad-virtual-joystick = { git = "https://github.com/kaller01/macroquad-virtual-joystick", branch = "bug_fix_missing_angle" }
 noise = "0.8.2"
+sapp-jsutils = "0.1.5"

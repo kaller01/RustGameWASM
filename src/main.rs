@@ -1,72 +1,41 @@
-use std::{collections::HashMap, sync::Mutex};
-
+use std::collections::HashMap;
+use crate::multiplayer::Event;
 use macroquad::prelude::*;
-use macroquad::rand::gen_range;
 use macroquad_virtual_joystick::{Joystick, JoystickDirection};
+use multiplayer::MultiplayerHandler;
 use player::{Entity, Player};
 
+pub mod multiplayer;
 pub mod player;
 pub mod world;
+
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;
+#[cfg(target_arch = "wasm32")]
+use crate::wasm::WasmEventHandler;
+
 use crate::world::World;
-#[macro_use]
-extern crate lazy_static;
 
 struct OtherPlayer {
+    name: String,
     pos: Vec2,
     color: Color,
 }
 
-lazy_static! {
-    static ref OTHER_PLAYERS_POS: Mutex<HashMap<u32, OtherPlayer>> = Mutex::new(HashMap::new());
-    static ref THIS_PLAYER_POS: Mutex<Vec2> = Mutex::new(vec2(0., 0.));
-    static ref THIS_PLAYER_COLOR: Mutex<Vec3> = Mutex::new(vec3(1., 1., 1.));
+#[cfg(target_arch = "wasm32")]
+fn get_multiplayer_handler() -> Box<dyn MultiplayerHandler> {
+    Box::new(WasmEventHandler {})
 }
 
-#[no_mangle]
-pub extern "C" fn update_players_pos(id: u32, x: f32, y: f32, r: f32, g: f32, b: f32) {
-    OTHER_PLAYERS_POS.lock().unwrap().insert(
-        id,
-        OtherPlayer {
-            pos: vec2(x, y),
-            color: Color::new(r, g, b, 1.),
-        },
-    );
-}
-
-#[no_mangle]
-pub extern "C" fn get_player_pos_x() -> f32 {
-    let pos = THIS_PLAYER_POS.lock().unwrap();
-    return pos.x;
-}
-
-#[no_mangle]
-pub extern "C" fn get_player_pos_y() -> f32 {
-    let pos = THIS_PLAYER_POS.lock().unwrap();
-    return pos.y;
-}
-
-#[no_mangle]
-pub extern "C" fn get_player_color_r() -> f32 {
-    let pos = THIS_PLAYER_COLOR.lock().unwrap();
-    return pos.x;
-}
-
-#[no_mangle]
-pub extern "C" fn get_player_color_g() -> f32 {
-    THIS_PLAYER_COLOR.lock().unwrap().y
-}
-
-#[no_mangle]
-pub extern "C" fn get_player_color_b() -> f32 {
-    THIS_PLAYER_COLOR.lock().unwrap().z
+#[cfg(not(target_arch = "wasm32"))]
+fn get_multiplayer_handler() -> Box<dyn MultiplayerHandler> {
+    Box::new(multiplayer::NotImplemented {})
 }
 
 #[macroquad::main("2D")]
 async fn main() {
-    rand::srand(macroquad::miniquad::date::now() as _);
-    THIS_PLAYER_COLOR.lock().unwrap().x = gen_range(0.5, 1.);
-    THIS_PLAYER_COLOR.lock().unwrap().y = gen_range(0.5, 1.);
-    THIS_PLAYER_COLOR.lock().unwrap().z = gen_range(0.5, 1.);
+    let multiplayer_handler = get_multiplayer_handler();
+    let mut other_players: HashMap<u32, OtherPlayer> = HashMap::new();
 
     let mut screen_size = (screen_width(), screen_height());
     let mut size = if screen_width() > screen_height() {
@@ -85,23 +54,46 @@ async fn main() {
     let mut world = World::generate();
 
     let mut player = Player::new(0., 0.);
-    let color = THIS_PLAYER_COLOR.lock().unwrap();
-    player.set_color(Color::new(color.x, color.y, color.z, 1.));
 
     let mut player_joystick =
         Joystick::new(screen_width() * 0.8, screen_height() * 0.8, size * 0.1);
     let mut camera_joytstick =
         Joystick::new(screen_width() * 0.2, screen_height() * 0.8, size * 0.1);
 
-    // THIS_PLAYER_COLOR'.lock().unwrap().r = 1.;
-    // THIS_PLAYER_COLOR.lock().unwrap().g = 1.;
-    // THIS_PLAYER_COLOR.lock().unwrap().b = 1.;
-
     loop {
         clear_background(LIGHTGRAY);
 
-        THIS_PLAYER_POS.lock().unwrap().x = player.get_position().x;
-        THIS_PLAYER_POS.lock().unwrap().y = player.get_position().y;
+        for event in multiplayer_handler.get_events() {
+            match event {
+                Event::PlayerUpdate {
+                    name,
+                    id,
+                    x,
+                    y,
+                    r,
+                    g,
+                    b,
+                } => match other_players.get_mut(&id) {
+                    Some(player) => player.pos = vec2(x, y),
+                    None => {
+                        let new_player = OtherPlayer {
+                            name,
+                            pos: vec2(x, y),
+                            color: Color::new(r, g, b, 1.),
+                        };
+                        other_players.insert(id, new_player);
+                    }
+                },
+                Event::PlayerDisconnect { id } => {
+                    other_players.remove(&id);
+                }
+                Event::YourColor { r, g, b } => player.set_color(Color::new(r, g, b, 1.)),
+            }
+        }
+
+        multiplayer_handler.set_your_player_pos(player.get_position());
+
+        // set_your_pos(player.get_position());
 
         if screen_size != (screen_width(), screen_height()) {
             screen_size = (screen_width(), screen_height());
@@ -174,10 +166,10 @@ async fn main() {
                 velocity.x = -speed;
             }
             if is_key_down(KeyCode::Up) {
-                velocity.y = speed;
+                velocity.y = -speed;
             }
             if is_key_down(KeyCode::Down) {
-                velocity.y = -speed;
+                velocity.y = speed;
             }
             player.set_velocity(velocity);
 
@@ -185,10 +177,7 @@ async fn main() {
             if touch_controll {
                 let joystick_event = player_joystick.update();
                 player.set_velocity(
-                    joystick_event.direction.to_local()
-                        * joystick_event.intensity
-                        * speed
-                        * vec2(1., -1.),
+                    joystick_event.direction.to_local() * joystick_event.intensity * speed,
                 );
             }
 
@@ -198,7 +187,7 @@ async fn main() {
         }
 
         //Set camera for world
-        let zoom = vec2(z, z * (screen_width() / screen_height()));
+        let zoom = vec2(z, -z * (screen_width() / screen_height()));
         set_camera(&Camera2D {
             target: target,
             zoom: zoom,
@@ -232,7 +221,22 @@ async fn main() {
         player.render();
 
         //Multiplayer tmp
-        for other_player in OTHER_PLAYERS_POS.lock().unwrap().values() {
+        let (font_size, font_scale, font_aspect) = camera_font_scale(2.);
+        let text_params = TextParams {
+            font_size,
+            font_scale,
+            font_scale_aspect: font_aspect,
+            color: BLACK,
+            ..Default::default()
+        };
+
+        for other_player in other_players.values() {
+            draw_text_ex(
+                &other_player.name,
+                other_player.pos.x + 1.5,
+                other_player.pos.y + 0.5,
+                text_params,
+            );
             draw_circle(
                 other_player.pos.x,
                 other_player.pos.y,

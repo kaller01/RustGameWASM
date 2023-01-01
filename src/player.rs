@@ -8,19 +8,24 @@ pub trait Entity {
 
 pub struct Player {
     pos: Vec2,
-    v: Vec2
+    v: Vec2,
+    color: Color
 }
 
 impl Player {
-    pub fn new(x: f32, y: f32) -> Player{
+    pub fn new(x: f32, y: f32,) -> Player{
         Player{
             pos: vec2(x, y),
-            v: vec2(0., 0.)
+            v: vec2(0., 0.),
+            color: PURPLE
         }
+    }
+    pub fn set_color(&mut self, color: Color){
+        self.color = color;
     }
     pub fn render(&self) {
         const SIZE: f32 = 1.;
-        draw_circle(self.pos.x, self.pos.y, SIZE, PURPLE);
+        draw_circle(self.pos.x, self.pos.y, SIZE, self.color);
     }
     pub fn set_velocity(&mut self, velocity: Vec2){
         self.v = velocity;

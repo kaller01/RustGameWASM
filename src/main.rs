@@ -1,16 +1,73 @@
+use std::{collections::HashMap, sync::Mutex};
+
 use macroquad::prelude::*;
-use player::{Entity, Player};
+use macroquad::rand::gen_range;
 use macroquad_virtual_joystick::{Joystick, JoystickDirection};
+use player::{Entity, Player};
 
 pub mod player;
 pub mod world;
 use crate::world::World;
+#[macro_use]
+extern crate lazy_static;
 
+struct OtherPlayer {
+    pos: Vec2,
+    color: Color,
+}
 
+lazy_static! {
+    static ref OTHER_PLAYERS_POS: Mutex<HashMap<u32, OtherPlayer>> = Mutex::new(HashMap::new());
+    static ref THIS_PLAYER_POS: Mutex<Vec2> = Mutex::new(vec2(0., 0.));
+    static ref THIS_PLAYER_COLOR: Mutex<Vec3> = Mutex::new(vec3(1., 1., 1.));
+}
+
+#[no_mangle]
+pub extern "C" fn update_players_pos(id: u32, x: f32, y: f32, r: f32, g: f32, b: f32) {
+    OTHER_PLAYERS_POS.lock().unwrap().insert(
+        id,
+        OtherPlayer {
+            pos: vec2(x, y),
+            color: Color::new(r, g, b, 1.),
+        },
+    );
+}
+
+#[no_mangle]
+pub extern "C" fn get_player_pos_x() -> f32 {
+    let pos = THIS_PLAYER_POS.lock().unwrap();
+    return pos.x;
+}
+
+#[no_mangle]
+pub extern "C" fn get_player_pos_y() -> f32 {
+    let pos = THIS_PLAYER_POS.lock().unwrap();
+    return pos.y;
+}
+
+#[no_mangle]
+pub extern "C" fn get_player_color_r() -> f32 {
+    let pos = THIS_PLAYER_COLOR.lock().unwrap();
+    return pos.x;
+}
+
+#[no_mangle]
+pub extern "C" fn get_player_color_g() -> f32 {
+    THIS_PLAYER_COLOR.lock().unwrap().y
+}
+
+#[no_mangle]
+pub extern "C" fn get_player_color_b() -> f32 {
+    THIS_PLAYER_COLOR.lock().unwrap().z
+}
 
 #[macroquad::main("2D")]
-#[tokio::main]
 async fn main() {
+    rand::srand(macroquad::miniquad::date::now() as _);
+    THIS_PLAYER_COLOR.lock().unwrap().x = gen_range(0.5, 1.);
+    THIS_PLAYER_COLOR.lock().unwrap().y = gen_range(0.5, 1.);
+    THIS_PLAYER_COLOR.lock().unwrap().z = gen_range(0.5, 1.);
+
     let mut screen_size = (screen_width(), screen_height());
     let mut size = if screen_width() > screen_height() {
         screen_width()
@@ -26,14 +83,25 @@ async fn main() {
     let mut touch_controll = false;
 
     let mut world = World::generate();
+
     let mut player = Player::new(0., 0.);
+    let color = THIS_PLAYER_COLOR.lock().unwrap();
+    player.set_color(Color::new(color.x, color.y, color.z, 1.));
+
     let mut player_joystick =
         Joystick::new(screen_width() * 0.8, screen_height() * 0.8, size * 0.1);
     let mut camera_joytstick =
         Joystick::new(screen_width() * 0.2, screen_height() * 0.8, size * 0.1);
 
+    // THIS_PLAYER_COLOR'.lock().unwrap().r = 1.;
+    // THIS_PLAYER_COLOR.lock().unwrap().g = 1.;
+    // THIS_PLAYER_COLOR.lock().unwrap().b = 1.;
+
     loop {
         clear_background(LIGHTGRAY);
+
+        THIS_PLAYER_POS.lock().unwrap().x = player.get_position().x;
+        THIS_PLAYER_POS.lock().unwrap().y = player.get_position().y;
 
         if screen_size != (screen_width(), screen_height()) {
             screen_size = (screen_width(), screen_height());
@@ -162,6 +230,16 @@ async fn main() {
         world.update_entity(&mut player, get_frame_time());
         //render player
         player.render();
+
+        //Multiplayer tmp
+        for other_player in OTHER_PLAYERS_POS.lock().unwrap().values() {
+            draw_circle(
+                other_player.pos.x,
+                other_player.pos.y,
+                1.,
+                other_player.color,
+            );
+        }
 
         if z <= MAX_ZOOM {
             draw_rectangle_lines(view.x, view.y, view.w, view.h, 5., PINK);

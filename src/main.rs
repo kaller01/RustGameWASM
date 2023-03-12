@@ -1,10 +1,12 @@
-use std::collections::HashMap;
 use crate::multiplayer::Event;
+use controlls::{Controll, Controller};
 use macroquad::prelude::*;
 use macroquad_virtual_joystick::{Joystick, JoystickDirection};
 use multiplayer::MultiplayerHandler;
 use player::{Entity, Player};
+use std::collections::HashMap;
 
+pub mod controlls;
 pub mod multiplayer;
 pub mod player;
 pub mod world;
@@ -39,6 +41,18 @@ fn get_multiplayer_handler() -> Box<dyn MultiplayerHandler> {
 async fn main() {
     let multiplayer_handler = get_multiplayer_handler();
     let mut other_players: HashMap<u32, OtherPlayer> = HashMap::new();
+    let mut controller = Controller::default();
+
+    
+
+    // HashMap::new();
+
+    // player_texture_down.
+
+    // player_texture_down.set_filter(FilterMode::Nearest);
+    // player_texture_left.set_filter(FilterMode::Nearest);
+    // player_texture_right.set_filter(FilterMode::Nearest);
+    // player_texture_up.set_filter(FilterMode::Nearest);
 
     let mut screen_size = (screen_width(), screen_height());
     let mut size = if screen_width() > screen_height() {
@@ -49,14 +63,11 @@ async fn main() {
     //Changable settings (camera, player etc)
     let mut target = vec2(0., 0.);
     let mut z = 0.05;
-    let mut camera_follow_player = true;
     const MAX_ZOOM: f32 = 0.01;
-    let mut generate_terrain = true;
-    let mut touch_controll = false;
 
     let mut world = World::generate();
 
-    let mut player = Player::new(0., 0.);
+    let mut player = Player::new(0., 0.).await;
 
     let mut player_joystick =
         Joystick::new(screen_width() * 0.8, screen_height() * 0.8, size * 0.1);
@@ -112,80 +123,62 @@ async fn main() {
             camera_joytstick =
                 Joystick::new(screen_width() * 0.2, screen_height() * 0.8, size * 0.1);
         }
-        //Touch controls
-        if is_key_pressed(KeyCode::T) {
-            touch_controll = !touch_controll;
-        }
-        if !touch_controll && !touches().is_empty() {
-            touch_controll = true;
-        }
 
-        //Handle camera controlls
+        //Handle controlls
         {
-            if is_key_down(KeyCode::A) {
-                target.x -= 2.;
-                camera_follow_player = false;
+            if controller.is(Controll::toggle_camera) {
+                if controller.is(Controll::move_left) {
+                    target.x -= 2.;
+                }
+                if controller.is(Controll::move_right) {
+                    target.x += 2.;
+                }
+                if controller.is(Controll::move_down) {
+                    target.y += 2.;
+                }
+                if controller.is(Controll::move_up) {
+                    target.y -= 2.;
+                }
+            } else {
+                let speed = 20.;
+                let mut velocity = vec2(0., 0.);
+                if controller.is(Controll::move_right) {
+                    velocity.x = speed;
+                }
+                if controller.is(Controll::move_left) {
+                    velocity.x = -speed;
+                }
+                if controller.is(Controll::move_up) {
+                    velocity.y = -speed;
+                }
+                if controller.is(Controll::move_down) {
+                    velocity.y = speed;
+                }
+                player.set_velocity(velocity);
+                target = player.get_position();
+
+                //Joystick
+                let joystick_event = player_joystick.update();
+                if joystick_event.direction != JoystickDirection::Idle {
+                    player.set_velocity(
+                        joystick_event.direction.to_local() * joystick_event.intensity * speed,
+                    );
+                }
             }
-            if is_key_down(KeyCode::D) {
-                target.x += 2.;
-                camera_follow_player = false;
-            }
-            if is_key_down(KeyCode::W) {
-                target.y += 2.;
-                camera_follow_player = false;
-            }
-            if is_key_down(KeyCode::S) {
-                target.y -= 2.;
-                camera_follow_player = false;
-            }
-            if is_key_down(KeyCode::E) {
+            if controller.is(Controll::zoom_in) {
                 z *= 1.1;
             }
-            if is_key_down(KeyCode::Q) {
+            if controller.is(Controll::zoom_out) {
                 z *= 0.9;
             }
-            if is_key_down(KeyCode::F) {
-                camera_follow_player = true;
-            }
 
-            if touch_controll {
+            if true {
                 let joystick_event = camera_joytstick.update();
                 match joystick_event.direction {
                     JoystickDirection::Up => z *= 1.01,
                     JoystickDirection::Down => z *= 0.99,
                     _ => (),
                 }
-            }
-        }
-
-        //handle player controlls
-        {
-            let speed = 20.;
-            let mut velocity = vec2(0., 0.);
-            if is_key_down(KeyCode::Right) {
-                velocity.x = speed;
-            }
-            if is_key_down(KeyCode::Left) {
-                velocity.x = -speed;
-            }
-            if is_key_down(KeyCode::Up) {
-                velocity.y = -speed;
-            }
-            if is_key_down(KeyCode::Down) {
-                velocity.y = speed;
-            }
-            player.set_velocity(velocity);
-
-            //Joystick
-            if touch_controll {
-                let joystick_event = player_joystick.update();
-                player.set_velocity(
-                    joystick_event.direction.to_local() * joystick_event.intensity * speed,
-                );
-            }
-
-            if camera_follow_player {
-                target = player.get_position();
             }
         }
 
@@ -209,10 +202,7 @@ async fn main() {
         let corner = target - size / 2.;
         let view = Rect::new(corner.x, corner.y, size.x, size.y);
 
-        if is_key_pressed(KeyCode::G) {
-            generate_terrain = !generate_terrain;
-        }
-        if generate_terrain {
+        if (controller.is(Controll::toggle_generation)) {
             world.generate_at(view);
         }
 
@@ -266,10 +256,8 @@ async fn main() {
         draw_text("F to follow player", 30.0, 120.0, 30.0, BLACK);
         draw_text("G to toggle generation", 30.0, 150.0, 30.0, BLACK);
         draw_text("T to toggle touch controls", 30.0, 180.0, 30.0, BLACK);
-        if touch_controll {
-            player_joystick.render();
-            camera_joytstick.render();
-        }
+        player_joystick.render();
+        camera_joytstick.render();
         if z <= MAX_ZOOM {
             draw_text("Max zoom reached, pink is camera border, see the chunks load in and out as you move camera", 30.0, screen_height()*0.95, 30.0, BLACK);
         }

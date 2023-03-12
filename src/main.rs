@@ -21,12 +21,6 @@ use crate::wasm::WasmEventHandler;
 
 use crate::world::World;
 
-struct OtherPlayer {
-    name: String,
-    pos: Vec2,
-    color: Color,
-}
-
 #[cfg(target_arch = "wasm32")]
 fn get_multiplayer_handler() -> Box<dyn MultiplayerHandler> {
     Box::new(WasmEventHandler {})
@@ -40,17 +34,8 @@ fn get_multiplayer_handler() -> Box<dyn MultiplayerHandler> {
 #[macroquad::main("2D")]
 async fn main() {
     let multiplayer_handler = get_multiplayer_handler();
-    let mut other_players: HashMap<u32, OtherPlayer> = HashMap::new();
+    let mut other_players: HashMap<u32, Player> = HashMap::new();
     let mut controller = Controller::default();
-
-    // HashMap::new();
-
-    // player_texture_down.
-
-    // player_texture_down.set_filter(FilterMode::Nearest);
-    // player_texture_left.set_filter(FilterMode::Nearest);
-    // player_texture_right.set_filter(FilterMode::Nearest);
-    // player_texture_up.set_filter(FilterMode::Nearest);
 
     let mut screen_size = (screen_width(), screen_height());
     let mut size = if screen_width() > screen_height() {
@@ -65,7 +50,9 @@ async fn main() {
 
     let mut world = World::generate();
 
-    let mut player = Player::new(0., 0.).await;
+    let textures = load_textures().await;
+
+    let mut player = Player::new_playable(0., 0., &textures);
 
     let mut player_joystick =
         Joystick::new(screen_width() * 0.8, screen_height() * 0.8, size * 0.1);
@@ -82,30 +69,31 @@ async fn main() {
                     id,
                     x,
                     y,
-                    r,
-                    g,
-                    b,
+                    vx,
+                    vy
                 } => match other_players.get_mut(&id) {
-                    Some(player) => player.pos = vec2(x, y),
+                    Some(player) => {
+                        player.set_position(vec2(x, y));
+                        player.set_velocity(vec2(vx,vy))
+
+                    },
                     None => {
-                        let new_player = OtherPlayer {
-                            name,
-                            pos: vec2(x, y),
-                            color: Color::new(r, g, b, 1.),
-                        };
+                        // let new_player = OtherPlayer {
+                        //     name,
+                        //     pos: vec2(x, y),
+                        //     color: Color::new(r, g, b, 1.),
+                        // };
+                        let new_player = Player::new_other(name, x, y, vx, vy, &textures);
                         other_players.insert(id, new_player);
                     }
                 },
                 Event::PlayerDisconnect { id } => {
                     other_players.remove(&id);
                 }
-                Event::YourColor { r, g, b } => player.set_color(Color::new(r, g, b, 1.)),
             }
         }
 
-        multiplayer_handler.set_your_player_pos(player.get_position());
-
-        // set_your_pos(player.get_position());
+        multiplayer_handler.set_your_player_pos(player.get_position(), player.get_velocity());
 
         if screen_size != (screen_width(), screen_height()) {
             screen_size = (screen_width(), screen_height());
@@ -124,32 +112,32 @@ async fn main() {
 
         //Handle controlls
         {
-            if controller.is(Controll::toggle_camera) {
-                if controller.is(Controll::move_left) {
+            if controller.is(Controll::ToggleCamera) {
+                if controller.is(Controll::MoveLeft) {
                     target.x -= 2.;
                 }
-                if controller.is(Controll::move_right) {
+                if controller.is(Controll::MoveRight) {
                     target.x += 2.;
                 }
-                if controller.is(Controll::move_down) {
+                if controller.is(Controll::MoveDown) {
                     target.y += 2.;
                 }
-                if controller.is(Controll::move_up) {
+                if controller.is(Controll::MoveUp) {
                     target.y -= 2.;
                 }
             } else {
                 let speed = 20.;
                 let mut velocity = vec2(0., 0.);
-                if controller.is(Controll::move_right) {
+                if controller.is(Controll::MoveRight) {
                     velocity.x = speed;
                 }
-                if controller.is(Controll::move_left) {
+                if controller.is(Controll::MoveLeft) {
                     velocity.x = -speed;
                 }
-                if controller.is(Controll::move_up) {
+                if controller.is(Controll::MoveUp) {
                     velocity.y = -speed;
                 }
-                if controller.is(Controll::move_down) {
+                if controller.is(Controll::MoveDown) {
                     velocity.y = speed;
                 }
                 velocity = velocity.normalize_or_zero() * speed;
@@ -160,14 +148,16 @@ async fn main() {
                 let joystick_event = player_joystick.update();
                 if joystick_event.direction != JoystickDirection::Idle {
                     player.set_velocity(
-                        joystick_event.direction.to_local().normalize() * joystick_event.intensity * speed,
+                        joystick_event.direction.to_local().normalize()
+                            * joystick_event.intensity
+                            * speed,
                     );
                 }
             }
-            if controller.is(Controll::zoom_in) {
+            if controller.is(Controll::ZoomIn) {
                 z *= 1.1;
             }
-            if controller.is(Controll::zoom_out) {
+            if controller.is(Controll::ZoomOut) {
                 z *= 0.9;
             }
 
@@ -199,18 +189,10 @@ async fn main() {
         let corner = target - size / 2.;
         let view = Rect::new(corner.x, corner.y, size.x, size.y);
 
-        if (controller.is(Controll::toggle_generation)) {
+        if (controller.is(Controll::ToggleGeneration)) {
             world.generate_at(view);
         }
 
-        //render world within camera view
-        world.render(view);
-        //update player
-        world.update_entity(&mut player, get_frame_time());
-        //render player
-        player.render();
-
-        //Multiplayer tmp
         let (font_size, font_scale, font_aspect) = camera_font_scale(2.);
         let text_params = TextParams {
             font_size,
@@ -220,20 +202,18 @@ async fn main() {
             ..Default::default()
         };
 
-        for other_player in other_players.values() {
-            draw_text_ex(
-                &other_player.name,
-                other_player.pos.x + 1.5,
-                other_player.pos.y + 0.5,
-                text_params,
-            );
-            draw_circle(
-                other_player.pos.x,
-                other_player.pos.y,
-                1.,
-                other_player.color,
-            );
+        //render world within camera view
+        world.render(view);
+        //update player
+        world.update_entity(&mut player, get_frame_time());
+        
+
+        for (_, other_player) in other_players.iter_mut() {
+            world.update_entity(other_player, get_frame_time());
+            other_player.render(&text_params);
         }
+
+        player.render(&text_params);
 
         if z <= MAX_ZOOM {
             draw_rectangle_lines(view.x, view.y, view.w, view.h, 5., PINK);
@@ -261,4 +241,26 @@ async fn main() {
 
         next_frame().await
     }
+}
+
+async fn load_textures() -> HashMap<String, Texture2D> {
+    let mut textures = HashMap::new();
+    let mut textures_names: Vec<String> = Vec::new();
+
+    for action in ["walk", "swim", "idle"] {
+        for direction in ["down", "left", "right", "up"] {
+            for step in ["1", "2", "3", "4"] {
+                textures_names.push(format!("{} {}{}", action, direction, step).to_owned())
+            }
+        }
+    }
+
+    for texture_name in textures_names {
+        let texture = load_texture(&format!("textures/{}.png", texture_name))
+            .await
+            .unwrap();
+        texture.set_filter(FilterMode::Nearest);
+        textures.insert(texture_name.to_owned(), texture);
+    }
+    textures
 }

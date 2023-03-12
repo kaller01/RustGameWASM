@@ -247,7 +247,7 @@ impl World {
             }
         }
 
-        entity.notify(&tile.interaction, time);
+        entity.update(&tile.interaction, time);
     }
 
     fn can_move_entity_to_tile(&self, new_pos: Vec2) -> bool {

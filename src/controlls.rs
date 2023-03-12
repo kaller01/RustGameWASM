@@ -4,19 +4,19 @@ use macroquad::prelude::{KeyCode, is_key_pressed, is_key_down};
 
 #[derive(Eq, Hash, PartialEq, Clone, Copy)]
 pub enum Controll {
-    move_up,
-    move_down,
-    move_left,
-    move_right,
-    spin_left,
-    spin_right,
+    MoveUp,
+    MoveDown,
+    MoveLeft,
+    MoveRight,
+    SpinLeft,
+    SpinRight,
     //Camera
-    zoom_in,
-    zoom_out,
-    toggle_camera,
+    ZoomIn,
+    ZoomOut,
+    ToggleCamera,
     //Dev
-    toggle_dev,
-    toggle_generation,
+    ToggleDev,
+    ToggleGeneration,
 }
 
 #[derive(Eq, Hash, PartialEq, Clone, Copy)]
@@ -34,22 +34,22 @@ impl Controller {
     pub fn default() -> Controller {
         Controller {
             keymap: HashMap::from([
-                (Controll::move_up, KeyCode::W),
-                (Controll::move_left, KeyCode::A),
-                (Controll::move_right, KeyCode::D),
-                (Controll::move_down, KeyCode::S),
-                (Controll::spin_left, KeyCode::Left),
-                (Controll::spin_right, KeyCode::Right),
-                (Controll::zoom_in, KeyCode::E),
-                (Controll::zoom_out, KeyCode::Q),
-                (Controll::toggle_dev, KeyCode::I),
-                (Controll::toggle_camera, KeyCode::F),
-                (Controll::toggle_generation, KeyCode::G),
+                (Controll::MoveUp, KeyCode::W),
+                (Controll::MoveLeft, KeyCode::A),
+                (Controll::MoveRight, KeyCode::D),
+                (Controll::MoveDown, KeyCode::S),
+                (Controll::SpinLeft, KeyCode::Left),
+                (Controll::SpinRight, KeyCode::Right),
+                (Controll::ZoomIn, KeyCode::E),
+                (Controll::ZoomOut, KeyCode::Q),
+                (Controll::ToggleDev, KeyCode::I),
+                (Controll::ToggleCamera, KeyCode::F),
+                (Controll::ToggleGeneration, KeyCode::G),
             ]),
             settings: HashMap::from([
-                (Controll::toggle_dev, Setting::toggle(false)),
-                (Controll::toggle_camera, Setting::toggle(false)),
-                (Controll::toggle_generation, Setting::toggle(true)),
+                (Controll::ToggleDev, Setting::toggle(false)),
+                (Controll::ToggleCamera, Setting::toggle(false)),
+                (Controll::ToggleGeneration, Setting::toggle(true)),
             ]),
         }
     }
@@ -65,18 +65,18 @@ impl Controller {
 
     pub fn is(&mut self, controll: Controll) -> bool {
         match controll {
-            Controll::move_up
-            | Controll::move_down
-            | Controll::move_left
-            | Controll::move_right
-            | Controll::spin_left
-            | Controll::spin_right
-            | Controll::zoom_in
-            | Controll::zoom_out => 
+            Controll::MoveUp
+            | Controll::MoveDown
+            | Controll::MoveLeft
+            | Controll::MoveRight
+            | Controll::SpinLeft
+            | Controll::SpinRight
+            | Controll::ZoomIn
+            | Controll::ZoomOut => 
                 is_key_down(self.get_key(&controll)),
-            | Controll::toggle_camera
-            | Controll::toggle_dev
-            | Controll::toggle_generation => {
+            | Controll::ToggleCamera
+            | Controll::ToggleDev
+            | Controll::ToggleGeneration => {
                 let key_pressed =  is_key_pressed(self.get_key(&controll));
                 match self.settings.get(&controll) {
                     Some(setting) => {

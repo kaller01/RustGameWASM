@@ -1,5 +1,4 @@
 use crate::player::Entity;
-// use bracket_noise::prelude::*;
 use macroquad::prelude::*;
 use noise::{Fbm, MultiFractal, NoiseFn, OpenSimplex};
 use std::collections::HashMap;
@@ -60,14 +59,14 @@ impl ChunkPosition {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 pub enum TileInteraction {
     Block,
     Walkable,
     Swimmable,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 pub enum TileTexture {
     Grass,
     Water,
@@ -77,7 +76,7 @@ pub enum TileTexture {
     SnowyMountain,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 pub struct Tile {
     texture: TileTexture,
     interaction: TileInteraction,
@@ -224,13 +223,12 @@ impl World {
         let current_coords = Coords::from_vec2(entity.get_position());
         let mut velocity = entity.get_velocity();
 
-        match self.get_tile(&current_coords) {
-            Some(tile) => match tile.interaction {
-                TileInteraction::Block => (),
-                TileInteraction::Walkable => (),
-                TileInteraction::Swimmable => velocity *= 0.2,
-            },
-            None => (),
+        let tile = self.get_tile(&current_coords).unwrap();
+
+        match tile.interaction {
+            TileInteraction::Block => (),
+            TileInteraction::Walkable => (),
+            TileInteraction::Swimmable => velocity *= 0.2,
         }
 
         let new_pos = entity.get_position() + velocity * time;
@@ -248,6 +246,8 @@ impl World {
                 }
             }
         }
+
+        entity.notify(&tile.interaction, time);
     }
 
     fn can_move_entity_to_tile(&self, new_pos: Vec2) -> bool {

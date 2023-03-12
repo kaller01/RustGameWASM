@@ -43,8 +43,6 @@ async fn main() {
     let mut other_players: HashMap<u32, OtherPlayer> = HashMap::new();
     let mut controller = Controller::default();
 
-    
-
     // HashMap::new();
 
     // player_texture_down.
@@ -154,6 +152,7 @@ async fn main() {
                 if controller.is(Controll::move_down) {
                     velocity.y = speed;
                 }
+                velocity = velocity.normalize_or_zero() * speed;
                 player.set_velocity(velocity);
                 target = player.get_position();
 
@@ -161,7 +160,7 @@ async fn main() {
                 let joystick_event = player_joystick.update();
                 if joystick_event.direction != JoystickDirection::Idle {
                     player.set_velocity(
-                        joystick_event.direction.to_local() * joystick_event.intensity * speed,
+                        joystick_event.direction.to_local().normalize() * joystick_event.intensity * speed,
                     );
                 }
             }
@@ -172,13 +171,11 @@ async fn main() {
                 z *= 0.9;
             }
 
-            if true {
-                let joystick_event = camera_joytstick.update();
-                match joystick_event.direction {
-                    JoystickDirection::Up => z *= 1.01,
-                    JoystickDirection::Down => z *= 0.99,
-                    _ => (),
-                }
+            let joystick_event = camera_joytstick.update();
+            match joystick_event.direction {
+                JoystickDirection::Up => z *= 1.01,
+                JoystickDirection::Down => z *= 0.99,
+                _ => (),
             }
         }
 

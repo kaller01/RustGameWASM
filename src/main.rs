@@ -11,9 +11,6 @@ pub mod multiplayer;
 pub mod player;
 pub mod world;
 
-#[macro_use]
-extern crate lazy_static;
-
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
 #[cfg(target_arch = "wasm32")]
@@ -28,12 +25,12 @@ fn get_multiplayer_handler() -> Box<dyn MultiplayerHandler> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn get_multiplayer_handler() -> Box<dyn MultiplayerHandler> {
-    Box::new(multiplayer::NotImplemented {})
+    Box::new(multiplayer::DevLocalMultiplayer::new())
 }
 
 #[macroquad::main("2D")]
 async fn main() {
-    let multiplayer_handler = get_multiplayer_handler();
+    let mut multiplayer_handler = get_multiplayer_handler();
     let mut other_players: HashMap<u32, Player> = HashMap::new();
     let mut controller = Controller::default();
 
@@ -54,6 +51,8 @@ async fn main() {
 
     let mut player = Player::new_playable(0., 0., &textures);
 
+    let mut player2 = Player::new_other(String::from("Player2"), 10., 10., 0., 0., &textures);
+
     let mut player_joystick =
         Joystick::new(screen_width() * 0.8, screen_height() * 0.8, size * 0.1);
     let mut camera_joytstick =
@@ -70,13 +69,12 @@ async fn main() {
                     x,
                     y,
                     vx,
-                    vy
+                    vy,
                 } => match other_players.get_mut(&id) {
                     Some(player) => {
                         player.set_position(vec2(x, y));
-                        player.set_velocity(vec2(vx,vy))
-
-                    },
+                        player.set_velocity(vec2(vx, vy))
+                    }
                     None => {
                         // let new_player = OtherPlayer {
                         //     name,
@@ -169,8 +167,44 @@ async fn main() {
             }
         }
 
+        //Player 2 controlls
+        if controller.is(Controll::ToggleSecondaryPlayer) {
+            let speed = 20.;
+            let mut velocity = vec2(0., 0.);
+            if controller.is(Controll::MoveSecondaryRight) {
+                velocity.x = speed;
+            }
+            if controller.is(Controll::MoveSecondaryLeft) {
+                velocity.x = -speed;
+            }
+            if controller.is(Controll::MoveSecondaryUp) {
+                velocity.y = -speed;
+            }
+            if controller.is(Controll::MoveSecondaryDown) {
+                velocity.y = speed;
+            }
+            velocity = velocity.normalize_or_zero() * speed;
+            player2.set_velocity(velocity);
+            player2.set_position(player2.get_position() + player2.get_velocity() * get_frame_time());
+            let player_update = Event::PlayerUpdate {
+                name: String::from("Player2"),
+                id: 0,
+                x: player2.get_position().x,
+                y: player2.get_position().y,
+                vx: player2.get_velocity().x,
+                vy: player2.get_velocity().y,
+            };
+            multiplayer_handler.add_event(player_update);
+        }
+
         //Set camera for world
+        
+        if !controller.is(Controll::ToggleMaxZoom) && z < MAX_ZOOM {
+            z = MAX_ZOOM
+        }
+
         let zoom = vec2(z, -z * (screen_width() / screen_height()));
+
         set_camera(&Camera2D {
             target: target,
             zoom: zoom,
@@ -180,16 +214,12 @@ async fn main() {
         });
 
         //Calculate the area of which the camera can see
-        let mut z = z;
-        if z < MAX_ZOOM {
-            z = MAX_ZOOM;
-        }
         let zoom = vec2(z, z * (screen_width() / screen_height()));
         let size = 1. / zoom * 2.;
         let corner = target - size / 2.;
         let view = Rect::new(corner.x, corner.y, size.x, size.y);
 
-        if (controller.is(Controll::ToggleGeneration)) {
+        if controller.is(Controll::ToggleGeneration) {
             world.generate_at(view);
         }
 
@@ -206,39 +236,43 @@ async fn main() {
         world.render(view);
         //update player
         world.update_entity(&mut player, get_frame_time());
-        
 
         for (_, other_player) in other_players.iter_mut() {
-            world.update_entity(other_player, get_frame_time());
+            if controller.is(Controll::ToggleOtherAnimation) {
+                world.update_entity(other_player, get_frame_time());
+            }
             other_player.render(&text_params);
         }
 
         player.render(&text_params);
 
-        if z <= MAX_ZOOM {
-            draw_rectangle_lines(view.x, view.y, view.w, view.h, 5., PINK);
-        }
+        // if z <= MAX_ZOOM {
+        //     if(controller.is(Controll::ToggleDev)){
+        //         draw_rectangle_lines(view.x, view.y, view.w, view.h, 5., PINK);
+        //     } else {
+        //         // z = MAX_ZOOM;
+        //     }
+        // }
 
         set_default_camera();
 
         draw_text(
-            "ARROWS to move player (purple circle)",
-            30.0,
+            "WASD to move player",
+            10.0,
             30.0,
             30.0,
             BLACK,
         );
-        draw_text("Q-E to zoom camera", 30.0, 60.0, 30.0, BLACK);
-        draw_text("WASD to move camera", 30.0, 90.0, 30.0, BLACK);
-        draw_text("F to follow player", 30.0, 120.0, 30.0, BLACK);
-        draw_text("G to toggle generation", 30.0, 150.0, 30.0, BLACK);
-        draw_text("T to toggle touch controls", 30.0, 180.0, 30.0, BLACK);
-        player_joystick.render();
-        camera_joytstick.render();
-        if z <= MAX_ZOOM {
-            draw_text("Max zoom reached, pink is camera border, see the chunks load in and out as you move camera", 30.0, screen_height()*0.95, 30.0, BLACK);
+        draw_text("Q-E to zoom camera", 10.0, 60.0, 30.0, BLACK);
+        // draw_text("WASD to move camera", 30.0, 90.0, 30.0, BLACK);
+        // draw_text("F to follow player", 30.0, 120.0, 30.0, BLACK);
+        // draw_text("G to toggle generation", 30.0, 150.0, 30.0, BLACK);
+        // draw_text("T to toggle touch controls", 30.0, 180.0, 30.0, BLACK);
+        if controller.is(Controll::ToggleTouch) {
+            player_joystick.render();
+            camera_joytstick.render();
         }
-
+       
         next_frame().await
     }
 }

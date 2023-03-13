@@ -1,8 +1,10 @@
 use std::{collections::HashMap, hash::Hash};
+use strum::IntoEnumIterator; // 0.17.1
+use strum_macros::EnumIter; // 0.17.1
 
-use macroquad::prelude::{KeyCode, is_key_pressed, is_key_down};
+use macroquad::prelude::{is_key_down, is_key_pressed, KeyCode};
 
-#[derive(Eq, Hash, PartialEq, Clone, Copy)]
+#[derive(Eq, Hash, PartialEq, Clone, Copy, EnumIter)]
 pub enum Controll {
     MoveUp,
     MoveDown,
@@ -10,18 +12,26 @@ pub enum Controll {
     MoveRight,
     SpinLeft,
     SpinRight,
+    ToggleTouch,
     //Camera
     ZoomIn,
     ZoomOut,
     ToggleCamera,
     //Dev
-    ToggleDev,
+    ToggleMaxZoom,
     ToggleGeneration,
+    ToggleOtherAnimation,
+    //Player 2
+    ToggleSecondaryPlayer,
+    MoveSecondaryUp,
+    MoveSecondaryDown,
+    MoveSecondaryLeft,
+    MoveSecondaryRight,
 }
 
-#[derive(Eq, Hash, PartialEq, Clone, Copy)]
+#[derive(Eq, Hash, PartialEq, Clone, Copy, EnumIter)]
 pub enum Setting {
-    toggle(bool)
+    Toggle(bool),
 }
 
 #[derive(Eq, PartialEq, Clone)]
@@ -32,24 +42,39 @@ pub struct Controller {
 
 impl Controller {
     pub fn default() -> Controller {
+        let mut keymap = HashMap::new();
+        for controll in Controll::iter() {
+            let keycode = match controll {
+                Controll::MoveUp => KeyCode::W,
+                Controll::MoveDown => KeyCode::S,
+                Controll::MoveLeft => KeyCode::A,
+                Controll::MoveRight => KeyCode::D,
+                Controll::SpinLeft => KeyCode::Left,
+                Controll::SpinRight => KeyCode::Right,
+                Controll::ToggleTouch => KeyCode::T,
+                Controll::ZoomIn => KeyCode::E,
+                Controll::ZoomOut => KeyCode::Q,
+                Controll::ToggleCamera => KeyCode::F,
+                Controll::ToggleMaxZoom => KeyCode::I,
+                Controll::ToggleGeneration => KeyCode::G,
+                Controll::ToggleOtherAnimation => KeyCode::O,
+                Controll::ToggleSecondaryPlayer => KeyCode::Kp5,
+                Controll::MoveSecondaryUp => KeyCode::Kp8,
+                Controll::MoveSecondaryDown => KeyCode::Kp2,
+                Controll::MoveSecondaryLeft => KeyCode::Kp4,
+                Controll::MoveSecondaryRight => KeyCode::Kp6,
+            };
+            keymap.insert(controll, keycode);
+        }
         Controller {
-            keymap: HashMap::from([
-                (Controll::MoveUp, KeyCode::W),
-                (Controll::MoveLeft, KeyCode::A),
-                (Controll::MoveRight, KeyCode::D),
-                (Controll::MoveDown, KeyCode::S),
-                (Controll::SpinLeft, KeyCode::Left),
-                (Controll::SpinRight, KeyCode::Right),
-                (Controll::ZoomIn, KeyCode::E),
-                (Controll::ZoomOut, KeyCode::Q),
-                (Controll::ToggleDev, KeyCode::I),
-                (Controll::ToggleCamera, KeyCode::F),
-                (Controll::ToggleGeneration, KeyCode::G),
-            ]),
+            keymap,
             settings: HashMap::from([
-                (Controll::ToggleDev, Setting::toggle(false)),
-                (Controll::ToggleCamera, Setting::toggle(false)),
-                (Controll::ToggleGeneration, Setting::toggle(true)),
+                (Controll::ToggleMaxZoom, Setting::Toggle(false)),
+                (Controll::ToggleCamera, Setting::Toggle(false)),
+                (Controll::ToggleGeneration, Setting::Toggle(true)),
+                (Controll::ToggleSecondaryPlayer, Setting::Toggle(false)),
+                (Controll::ToggleOtherAnimation, Setting::Toggle(true)),
+                (Controll::ToggleTouch, Setting::Toggle(true)),
             ]),
         }
     }
@@ -58,7 +83,7 @@ impl Controller {
         match self.keymap.get(&controll) {
             Some(key) => {
                 return key.to_owned();
-            },
+            }
             None => todo!(),
         }
     }
@@ -72,69 +97,38 @@ impl Controller {
             | Controll::SpinLeft
             | Controll::SpinRight
             | Controll::ZoomIn
-            | Controll::ZoomOut => 
-                is_key_down(self.get_key(&controll)),
-            | Controll::ToggleCamera
-            | Controll::ToggleDev
-            | Controll::ToggleGeneration => {
-                let key_pressed =  is_key_pressed(self.get_key(&controll));
+            | Controll::ZoomOut
+            | Controll::MoveSecondaryUp
+            | Controll::MoveSecondaryDown
+            | Controll::MoveSecondaryLeft
+            | Controll::MoveSecondaryRight => is_key_down(self.get_key(&controll)),
+            Controll::ToggleCamera
+            | Controll::ToggleMaxZoom
+            | Controll::ToggleGeneration
+            | Controll::ToggleSecondaryPlayer
+            | Controll::ToggleOtherAnimation
+            | Controll::ToggleTouch => {
+                let key_pressed = is_key_pressed(self.get_key(&controll));
                 match self.settings.get(&controll) {
                     Some(setting) => {
                         match setting {
-                            Setting::toggle(enabled) => {
+                            Setting::Toggle(enabled) => {
                                 if key_pressed {
                                     let tmp = enabled.to_owned();
-                                    self.settings.insert(controll.to_owned(), Setting::toggle(!enabled.to_owned()));
+                                    self.settings.insert(
+                                        controll.to_owned(),
+                                        Setting::Toggle(!enabled.to_owned()),
+                                    );
                                     return tmp;
                                 } else {
                                     return *enabled;
                                 }
-                            },
+                            }
                         };
-                    },
+                    }
                     None => todo!(),
                 }
-            },
-        }
-    }
-}
-
-pub struct KeyMapping {
-    //Movement
-    move_up: KeyCode,
-    move_down: KeyCode,
-    move_left: KeyCode,
-    move_right: KeyCode,
-    toggle_touch: KeyCode,
-    spin_left: KeyCode,
-    spin_right: KeyCode,
-    //Camera
-    zoom_in: KeyCode,
-    zoom_out: KeyCode,
-    detach_camera: KeyCode,
-    //Dev
-    toggle_dev: KeyCode,
-    toggle_generation: KeyCode,
-}
-
-impl KeyMapping {
-    pub fn default() -> KeyMapping {
-        KeyMapping {
-            //Movement
-            move_up: KeyCode::W,
-            move_down: KeyCode::S,
-            move_left: KeyCode::A,
-            move_right: KeyCode::R,
-            toggle_touch: KeyCode::T,
-            spin_left: KeyCode::Left,
-            spin_right: KeyCode::Right,
-            //Camera
-            zoom_in: KeyCode::E,
-            zoom_out: KeyCode::Q,
-            detach_camera: KeyCode::F,
-            //Dev
-            toggle_dev: KeyCode::I,
-            toggle_generation: KeyCode::G,
+            }
         }
     }
 }

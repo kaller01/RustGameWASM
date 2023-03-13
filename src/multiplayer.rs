@@ -16,18 +16,35 @@ pub enum Event {
 }
 
 pub trait MultiplayerHandler {
-    fn get_events(&self) -> Vec<Event>;
+    fn get_events(&mut self) -> Vec<Event>;
+    fn add_event(&mut self, event: Event);
     fn set_your_player_pos(&self, pos: Vec2, v: Vec2);
 }
 
-pub struct NotImplemented {}
+pub struct DevLocalMultiplayer {
+    events: Vec<Event>
+}
 
-impl MultiplayerHandler for NotImplemented {
-    fn get_events(&self) -> Vec<Event> {
-        Vec::new()
+impl DevLocalMultiplayer {
+    pub fn new() -> DevLocalMultiplayer{
+        DevLocalMultiplayer {
+            events: Vec::new()
+        }
+    }
+}
+
+impl MultiplayerHandler for DevLocalMultiplayer {
+    fn get_events(&mut self) -> Vec<Event> {
+        let size = self.events.len();
+        let events = self.events.drain(0..size).collect();
+        return events;
     }
 
-    fn set_your_player_pos(&self, pos: Vec2, v: Vec2) {
+    fn set_your_player_pos(&self, _pos: Vec2, _v: Vec2) {
         
+    }
+
+    fn add_event(&mut self, event: Event) {
+        self.events.push(event)
     }
 }

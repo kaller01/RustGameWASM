@@ -2,6 +2,9 @@ use macroquad::prelude::*;
 use sapp_jsutils::JsObject;
 use std::{collections::VecDeque, sync::Mutex};
 
+#[macro_use]
+extern crate lazy_static;
+
 use crate::multiplayer::Event;
 use crate::multiplayer::MultiplayerHandler;
 
@@ -14,7 +17,7 @@ lazy_static! {
 pub struct WasmEventHandler {}
 
 impl MultiplayerHandler for WasmEventHandler {
-    fn get_events(&self) -> Vec<Event> {
+    fn get_events(&mut self) -> Vec<Event> {
         let size = EVENT_BUFFER.lock().unwrap().len();
         let events = EVENT_BUFFER.lock().unwrap().drain(0..size).collect();
         return events;
@@ -25,6 +28,10 @@ impl MultiplayerHandler for WasmEventHandler {
         THIS_PLAYER_POS.lock().unwrap().y = pos.y;
         THIS_PLAYER_VELOCITY.lock().unwrap().x = v.x;
         THIS_PLAYER_VELOCITY.lock().unwrap().y = v.y;
+    }
+
+    fn add_event(&mut self, event: Event) {
+        
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::player::Entity;
-use macroquad::prelude::*;
+use macroquad::{prelude::*};
 use noise::{Fbm, MultiFractal, NoiseFn, OpenSimplex};
 use std::collections::HashMap;
 
@@ -223,31 +223,34 @@ impl World {
         let current_coords = Coords::from_vec2(entity.get_position());
         let mut velocity = entity.get_velocity();
 
-        let tile = self.get_tile(&current_coords).unwrap();
+        match self.get_tile(&current_coords) {
+            Some(tile) => {
+                match tile.interaction {
+                    TileInteraction::Block => (),
+                    TileInteraction::Walkable => (),
+                    TileInteraction::Swimmable => velocity *= 0.3,
+                }
 
-        match tile.interaction {
-            TileInteraction::Block => (),
-            TileInteraction::Walkable => (),
-            TileInteraction::Swimmable => velocity *= 0.2,
-        }
+                let new_pos = entity.get_position() + velocity * time;
 
-        let new_pos = entity.get_position() + velocity * time;
-
-        if self.can_move_entity_to_tile(new_pos) {
-            entity.set_position(new_pos);
-        } else {
-            let new_pos = entity.get_position() + vec2(velocity.x, 0.) * time;
-            if self.can_move_entity_to_tile(new_pos) {
-                entity.set_position(new_pos);
-            } else {
-                let new_pos = entity.get_position() + vec2(0., velocity.y) * time;
                 if self.can_move_entity_to_tile(new_pos) {
                     entity.set_position(new_pos);
+                } else {
+                    let new_pos = entity.get_position() + vec2(velocity.x, 0.) * time;
+                    if self.can_move_entity_to_tile(new_pos) {
+                        entity.set_position(new_pos);
+                    } else {
+                        let new_pos = entity.get_position() + vec2(0., velocity.y) * time;
+                        if self.can_move_entity_to_tile(new_pos) {
+                            entity.set_position(new_pos);
+                        }
+                    }
                 }
-            }
-        }
 
-        entity.update(&tile.interaction, time);
+                entity.update(&tile.interaction, time);
+            }
+            None => (),
+        };
     }
 
     fn can_move_entity_to_tile(&self, new_pos: Vec2) -> bool {

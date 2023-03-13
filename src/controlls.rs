@@ -10,8 +10,9 @@ pub enum Controll {
     MoveDown,
     MoveLeft,
     MoveRight,
-    SpinLeft,
-    SpinRight,
+    Attack,
+    Roll,
+    Block,
     ToggleTouch,
     //Camera
     ZoomIn,
@@ -49,8 +50,9 @@ impl Controller {
                 Controll::MoveDown => KeyCode::S,
                 Controll::MoveLeft => KeyCode::A,
                 Controll::MoveRight => KeyCode::D,
-                Controll::SpinLeft => KeyCode::Left,
-                Controll::SpinRight => KeyCode::Right,
+                Controll::Attack => KeyCode::Space,
+                Controll::Roll => KeyCode::LeftAlt,
+                Controll::Block => KeyCode::LeftControl,
                 Controll::ToggleTouch => KeyCode::T,
                 Controll::ZoomIn => KeyCode::E,
                 Controll::ZoomOut => KeyCode::Q,
@@ -94,8 +96,9 @@ impl Controller {
             | Controll::MoveDown
             | Controll::MoveLeft
             | Controll::MoveRight
-            | Controll::SpinLeft
-            | Controll::SpinRight
+            | Controll::Attack
+            | Controll::Roll
+            | Controll::Block
             | Controll::ZoomIn
             | Controll::ZoomOut
             | Controll::MoveSecondaryUp

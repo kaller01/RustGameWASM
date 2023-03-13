@@ -11,3 +11,5 @@ macroquad = "0.3.25"
 macroquad-virtual-joystick = { git = "https://github.com/kaller01/macroquad-virtual-joystick", branch = "bug_fix_missing_angle" }
 noise = "0.8.2"
 sapp-jsutils = "0.1.5"
+strum = "0.24.1"
+strum_macros = "0.24.3"

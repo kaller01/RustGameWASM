@@ -1,4 +1,4 @@
-use crate::multiplayer::Event;
+use crate::{multiplayer::Event, player::load_textures};
 use controlls::{Controll, Controller};
 use macroquad::prelude::*;
 use macroquad_virtual_joystick::{Joystick, JoystickDirection};
@@ -124,7 +124,7 @@ async fn main() {
                     target.y -= 2.;
                 }
             } else {
-                let speed = 20.;
+                let speed = 15.;
                 let mut velocity = vec2(0., 0.);
                 if controller.is(Controll::MoveRight) {
                     velocity.x = speed;
@@ -164,6 +164,16 @@ async fn main() {
                 JoystickDirection::Up => z *= 1.01,
                 JoystickDirection::Down => z *= 0.99,
                 _ => (),
+            }
+
+            if controller.is(Controll::Attack) {
+                player.attack();
+            }
+            if controller.is(Controll::Roll)  {
+                player.roll();
+            }
+            if controller.is(Controll::Block) {
+                player.block();
             }
         }
 
@@ -277,24 +287,3 @@ async fn main() {
     }
 }
 
-async fn load_textures() -> HashMap<String, Texture2D> {
-    let mut textures = HashMap::new();
-    let mut textures_names: Vec<String> = Vec::new();
-
-    for action in ["walk", "swim", "idle"] {
-        for direction in ["down", "left", "right", "up"] {
-            for step in ["1", "2", "3", "4"] {
-                textures_names.push(format!("{} {}{}", action, direction, step).to_owned())
-            }
-        }
-    }
-
-    for texture_name in textures_names {
-        let texture = load_texture(&format!("textures/{}.png", texture_name))
-            .await
-            .unwrap();
-        texture.set_filter(FilterMode::Nearest);
-        textures.insert(texture_name.to_owned(), texture);
-    }
-    textures
-}

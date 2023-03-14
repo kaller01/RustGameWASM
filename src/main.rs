@@ -12,6 +12,10 @@ pub mod player;
 pub mod world;
 
 #[cfg(target_arch = "wasm32")]
+#[macro_use]
+extern crate lazy_static;
+
+#[cfg(target_arch = "wasm32")]
 pub mod wasm;
 #[cfg(target_arch = "wasm32")]
 use crate::wasm::WasmEventHandler;
@@ -71,16 +75,11 @@ async fn main() {
                     vx,
                     vy,
                 } => match other_players.get_mut(&id) {
-                    Some(player) => {
-                        player.set_position(vec2(x, y));
-                        player.set_velocity(vec2(vx, vy))
+                    Some(other_player) => {
+                        other_player.set_position(vec2(x, y));
+                        other_player.set_velocity(vec2(vx, vy))
                     }
                     None => {
-                        // let new_player = OtherPlayer {
-                        //     name,
-                        //     pos: vec2(x, y),
-                        //     color: Color::new(r, g, b, 1.),
-                        // };
                         let new_player = Player::new_other(name, x, y, vx, vy, &textures);
                         other_players.insert(id, new_player);
                     }
@@ -88,6 +87,27 @@ async fn main() {
                 Event::PlayerDisconnect { id } => {
                     other_players.remove(&id);
                 }
+                Event::PlayerAction {
+                    id,
+                    x,
+                    y,
+                    direction,
+                    action,
+                } => match other_players.get_mut(&id) {
+                    Some(other_player) => {
+                        other_player.force_action(action, vec2(x, y), direction);
+                        match action {
+                            player::BlockingAction::Attack => {
+                                debug!("Distance {}", player.get_position().distance(vec2(x, y)));
+                                if player.get_position().distance(vec2(x, y)) < 5. {
+                                    player.kill();
+                                }
+                            }
+                            _ => (),
+                        }
+                    }
+                    None => (),
+                },
             }
         }
 
@@ -159,56 +179,103 @@ async fn main() {
                 z *= 0.9;
             }
 
+            let mut action = None;
+
             let joystick_event = camera_joytstick.update();
             match joystick_event.direction {
                 JoystickDirection::Up => z *= 1.01,
                 JoystickDirection::Down => z *= 0.99,
+                JoystickDirection::Left => action = Some(player::BlockingAction::Attack),
+                JoystickDirection::Right => action = Some(player::BlockingAction::Roll),
                 _ => (),
             }
 
             if controller.is(Controll::Attack) {
-                player.attack();
+                action = Some(player::BlockingAction::Attack)
             }
-            if controller.is(Controll::Roll)  {
-                player.roll();
+            if controller.is(Controll::Roll) {
+                action = Some(player::BlockingAction::Roll)
             }
             if controller.is(Controll::Block) {
-                player.block();
+                action = Some(player::BlockingAction::Block)
+            }
+
+            match action {
+                Some(action) => match player.try_action(action) {
+                    Ok(_) => multiplayer_handler.upstream_event(Event::PlayerAction {
+                        id: 0,
+                        x: player.get_position().x,
+                        y: player.get_position().y,
+                        direction: player.get_direction(),
+                        action: action,
+                    }),
+                    Err(_) => (),
+                },
+                None => (),
             }
         }
 
-        //Player 2 controlls
-        if controller.is(Controll::ToggleSecondaryPlayer) {
-            let speed = 20.;
-            let mut velocity = vec2(0., 0.);
-            if controller.is(Controll::MoveSecondaryRight) {
-                velocity.x = speed;
+        {
+            //Player 2 controlls
+            if controller.is(Controll::ToggleSecondaryPlayer) {
+                player2.update(&world::TileInteraction::Walkable, get_frame_time());
+                let speed = 20.;
+                let mut velocity = vec2(0., 0.);
+                if controller.is(Controll::MoveSecondaryRight) {
+                    velocity.x = speed;
+                }
+                if controller.is(Controll::MoveSecondaryLeft) {
+                    velocity.x = -speed;
+                }
+                if controller.is(Controll::MoveSecondaryUp) {
+                    velocity.y = -speed;
+                }
+                if controller.is(Controll::MoveSecondaryDown) {
+                    velocity.y = speed;
+                }
+                velocity = velocity.normalize_or_zero() * speed;
+                player2.set_velocity(velocity);
+                player2.set_position(
+                    player2.get_position() + player2.get_velocity() * get_frame_time(),
+                );
+                let player_update = Event::PlayerUpdate {
+                    name: String::from("Player2"),
+                    id: 0,
+                    x: player2.get_position().x,
+                    y: player2.get_position().y,
+                    vx: player2.get_velocity().x,
+                    vy: player2.get_velocity().y,
+                };
+                multiplayer_handler.upstream_event(player_update);
+                let mut action = None;
+                if controller.is(Controll::SecondaryAttack) {
+                    action = Some(player::BlockingAction::Attack)
+                }
+                if controller.is(Controll::SecondaryRoll) {
+                    action = Some(player::BlockingAction::Roll)
+                }
+
+                match action {
+                    Some(action) => match player2.try_action(action) {
+                        Ok(_) => {
+                            let event = Event::PlayerAction {
+                                id: 0,
+                                x: player2.get_position().x,
+                                y: player2.get_position().y,
+                                direction: player2.get_direction(),
+                                action,
+                            };
+                            multiplayer_handler.upstream_event(event)
+                        }
+                        Err(_) => (),
+                    },
+                    None => (),
+                }
             }
-            if controller.is(Controll::MoveSecondaryLeft) {
-                velocity.x = -speed;
-            }
-            if controller.is(Controll::MoveSecondaryUp) {
-                velocity.y = -speed;
-            }
-            if controller.is(Controll::MoveSecondaryDown) {
-                velocity.y = speed;
-            }
-            velocity = velocity.normalize_or_zero() * speed;
-            player2.set_velocity(velocity);
-            player2.set_position(player2.get_position() + player2.get_velocity() * get_frame_time());
-            let player_update = Event::PlayerUpdate {
-                name: String::from("Player2"),
-                id: 0,
-                x: player2.get_position().x,
-                y: player2.get_position().y,
-                vx: player2.get_velocity().x,
-                vy: player2.get_velocity().y,
-            };
-            multiplayer_handler.add_event(player_update);
         }
 
         //Set camera for world
-        
+
         if !controller.is(Controll::ToggleMaxZoom) && z < MAX_ZOOM {
             z = MAX_ZOOM
         }
@@ -266,13 +333,7 @@ async fn main() {
 
         set_default_camera();
 
-        draw_text(
-            "WASD to move player",
-            10.0,
-            30.0,
-            30.0,
-            BLACK,
-        );
+        draw_text("WASD to move player", 10.0, 30.0, 30.0, BLACK);
         draw_text("Q-E to zoom camera", 10.0, 60.0, 30.0, BLACK);
         // draw_text("WASD to move camera", 30.0, 90.0, 30.0, BLACK);
         // draw_text("F to follow player", 30.0, 120.0, 30.0, BLACK);
@@ -282,8 +343,7 @@ async fn main() {
             player_joystick.render();
             camera_joytstick.render();
         }
-       
+
         next_frame().await
     }
 }
-

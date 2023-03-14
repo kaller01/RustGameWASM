@@ -28,6 +28,8 @@ pub enum Controll {
     MoveSecondaryDown,
     MoveSecondaryLeft,
     MoveSecondaryRight,
+    SecondaryAttack,
+    SecondaryRoll
 }
 
 #[derive(Eq, Hash, PartialEq, Clone, Copy, EnumIter)]
@@ -50,9 +52,9 @@ impl Controller {
                 Controll::MoveDown => KeyCode::S,
                 Controll::MoveLeft => KeyCode::A,
                 Controll::MoveRight => KeyCode::D,
-                Controll::Attack => KeyCode::Space,
-                Controll::Roll => KeyCode::LeftAlt,
-                Controll::Block => KeyCode::LeftControl,
+                Controll::Attack => KeyCode::J,
+                Controll::Roll => KeyCode::K,
+                Controll::Block => KeyCode::L,
                 Controll::ToggleTouch => KeyCode::T,
                 Controll::ZoomIn => KeyCode::E,
                 Controll::ZoomOut => KeyCode::Q,
@@ -65,6 +67,8 @@ impl Controller {
                 Controll::MoveSecondaryDown => KeyCode::Kp2,
                 Controll::MoveSecondaryLeft => KeyCode::Kp4,
                 Controll::MoveSecondaryRight => KeyCode::Kp6,
+                Controll::SecondaryAttack => KeyCode::Kp0,
+                Controll::SecondaryRoll => KeyCode::KpMultiply
             };
             keymap.insert(controll, keycode);
         }
@@ -104,7 +108,9 @@ impl Controller {
             | Controll::MoveSecondaryUp
             | Controll::MoveSecondaryDown
             | Controll::MoveSecondaryLeft
-            | Controll::MoveSecondaryRight => is_key_down(self.get_key(&controll)),
+            | Controll::MoveSecondaryRight
+            | Controll::SecondaryAttack
+            | Controll::SecondaryRoll => is_key_down(self.get_key(&controll)),
             Controll::ToggleCamera
             | Controll::ToggleMaxZoom
             | Controll::ToggleGeneration

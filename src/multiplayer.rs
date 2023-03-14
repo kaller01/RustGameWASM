@@ -1,5 +1,7 @@
 use macroquad::prelude::Vec2;
 
+use crate::player::{BlockingAction, Direction};
+
 #[derive(Debug)]
 pub enum Event {
     PlayerUpdate {
@@ -8,7 +10,14 @@ pub enum Event {
         x: f32,
         y: f32,
         vx: f32,
-        vy: f32
+        vy: f32,
+    },
+    PlayerAction {
+        id: u32,
+        x: f32,
+        y: f32,
+        direction: Direction,
+        action: BlockingAction
     },
     PlayerDisconnect {
         id: u32,
@@ -17,7 +26,7 @@ pub enum Event {
 
 pub trait MultiplayerHandler {
     fn get_events(&mut self) -> Vec<Event>;
-    fn add_event(&mut self, event: Event);
+    fn upstream_event(&mut self, event: Event);
     fn set_your_player_pos(&self, pos: Vec2, v: Vec2);
 }
 
@@ -44,7 +53,7 @@ impl MultiplayerHandler for DevLocalMultiplayer {
         
     }
 
-    fn add_event(&mut self, event: Event) {
+    fn upstream_event(&mut self, event: Event) {
         self.events.push(event)
     }
 }

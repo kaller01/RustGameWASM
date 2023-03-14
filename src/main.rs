@@ -53,7 +53,7 @@ async fn main() {
 
     let textures = load_textures().await;
 
-    let mut player = Player::new_playable(0., 0., &textures);
+    let mut player = Player::new_playable(-3., -10., &textures);
 
     let mut player2 = Player::new_other(String::from("Player2"), 10., 10., 0., 0., &textures);
 

@@ -160,7 +160,7 @@ impl Player<'_> {
     }
 
     pub fn kill(&mut self) {
-        self.pos = vec2(0., 0.);
+        self.pos = vec2(-3., -10.);
     }
 
     pub fn force_action(&mut self, action: BlockingAction, pos: Vec2, direction: Direction) {
@@ -218,7 +218,7 @@ impl Player<'_> {
                 ..Default::default()
             },
         );
-        draw_circle(self.pos.x, self.pos.y, 0.1, GREEN);
+        // draw_circle(self.pos.x, self.pos.y, 0.1, GREEN);
         draw_text_ex(&self.name, self.pos.x + 1., self.pos.y - 2., *text_params);
     }
     pub fn set_velocity(&mut self, velocity: Vec2) {

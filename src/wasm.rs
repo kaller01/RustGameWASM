@@ -75,9 +75,10 @@ pub extern "C" fn get_upstream_event() -> JsObject {
                 action,
             } => {
                 let action = match action {
-                    crate::player::BlockingAction::Attack => 1.,
-                    crate::player::BlockingAction::Roll => 2.,
-                    crate::player::BlockingAction::Block => 3.,
+                    BlockingAction::Attack => 1.,
+                    BlockingAction::Roll => 2.,
+                    BlockingAction::Block => 3.,
+                    BlockingAction::Dying => 4.,
                 };
 
                 let direction = match direction {

@@ -51,13 +51,17 @@ impl MultiplayerHandler for WasmEventHandler {
                 direction,
                 action,
             } => match action {
-                crate::player::BlockingAction::Attack | crate::player::BlockingAction::Roll => {
+                crate::player::BlockingAction::Attack | crate::player::BlockingAction::Roll | crate::player::BlockingAction::Dying  => {
                     EVENT_UPSTREAM.lock().unwrap().push_back(event);
                 }
                 _ => (),
             },
             _ => (),
         }
+    }
+
+    fn downstream_event(&mut self, event: Event) {
+        EVENT_DOWNSTREAM.lock().unwrap().push_back(event);
     }
 }
 
@@ -74,6 +78,8 @@ pub extern "C" fn get_upstream_event() -> JsObject {
                 direction,
                 action,
             } => {
+                debug!("Upstream {:?}", event);
+
                 let action = match action {
                     BlockingAction::Attack => 1.,
                     BlockingAction::Roll => 2.,
@@ -129,8 +135,16 @@ pub extern "C" fn update_player(js_object: JsObject, id: u32, x: f32, y: f32, vx
 }
 
 #[no_mangle]
+pub extern "C" fn teleport(x: f32, y:f32) {
+    let event = Event::CommandTeleport {
+        x,
+        y
+    };
+    EVENT_DOWNSTREAM.lock().unwrap().push_back(event);
+}
+
+#[no_mangle]
 pub extern "C" fn downstream_player_action(id: u32, x: f32, y: f32, action: f32, direction: f32) {
-    let mut name = String::new();
     let mut d = Direction::Up;
     let mut a = BlockingAction::Attack;
 
@@ -148,6 +162,8 @@ pub extern "C" fn downstream_player_action(id: u32, x: f32, y: f32, action: f32,
         a = BlockingAction::Attack;
     } else if action == 2. {
         a = BlockingAction::Roll;
+    } else if action == 4. {
+        a = BlockingAction::Dying;
     }
 
     let event = Event::PlayerAction {
@@ -157,6 +173,8 @@ pub extern "C" fn downstream_player_action(id: u32, x: f32, y: f32, action: f32,
         direction: d,
         action: a,
     };
+
+    debug!("Downstream {:?}", event);
 
     EVENT_DOWNSTREAM.lock().unwrap().push_back(event);
 }

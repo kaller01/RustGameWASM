@@ -1,5 +1,5 @@
 use crate::player::Entity;
-use macroquad::{prelude::*};
+use macroquad::prelude::*;
 use noise::{Fbm, MultiFractal, NoiseFn, OpenSimplex};
 use std::collections::HashMap;
 
@@ -64,16 +64,34 @@ pub enum TileInteraction {
     Block,
     Walkable,
     Swimmable,
+    Crawl,
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 pub enum TileTexture {
     Grass,
     Water,
+    ShallowWater,
     Sand,
     DeepWater,
+    Dirt,
     Mountain,
     SnowyMountain,
+}
+
+impl TileTexture {
+    fn to_color(&self) -> Color {
+        match self {
+            TileTexture::Grass => GREEN,
+            TileTexture::ShallowWater => SKYBLUE,
+            TileTexture::Water => BLUE,
+            TileTexture::DeepWater => DARKBLUE,
+            TileTexture::Mountain => GRAY,
+            TileTexture::SnowyMountain => WHITE,
+            TileTexture::Sand => YELLOW,
+            TileTexture::Dirt => Color::from_rgba(155, 118, 83, 255),
+        }
+    }
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
@@ -93,14 +111,18 @@ impl Default for Tile {
 
 impl Tile {
     fn generate(n: f64) -> Tile {
-        let (texture, interaction) = if n < 0.3 {
+        let (texture, interaction) = if n < 0.2 {
             (TileTexture::DeepWater, TileInteraction::Block)
-        } else if n < 0.4 {
+        } else if n < 0.35 {
             (TileTexture::Water, TileInteraction::Swimmable)
+        } else if n < 0.4 {
+            (TileTexture::ShallowWater, TileInteraction::Crawl)
         } else if n < 0.42 {
             (TileTexture::Sand, TileInteraction::Walkable)
         } else if n < 0.65 {
             (TileTexture::Grass, TileInteraction::Walkable)
+        } else if n < 0.69 {
+            (TileTexture::Dirt, TileInteraction::Block)
         } else if n < 0.8 {
             (TileTexture::Mountain, TileInteraction::Block)
         } else {
@@ -129,7 +151,7 @@ impl World {
         let noise = Fbm::<OpenSimplex>::new(0)
             .set_frequency(0.01)
             .set_persistence(0.6)
-            .set_lacunarity(2.0)
+            .set_lacunarity(2.)
             .set_octaves(5);
 
         let x1 = -10;
@@ -229,6 +251,7 @@ impl World {
                     TileInteraction::Block => (),
                     TileInteraction::Walkable => (),
                     TileInteraction::Swimmable => velocity *= 0.3,
+                    TileInteraction::Crawl => velocity *= 0.5,
                 }
 
                 let new_pos = entity.get_position() + velocity * time;
@@ -260,6 +283,7 @@ impl World {
                 TileInteraction::Block => false,
                 TileInteraction::Walkable => true,
                 TileInteraction::Swimmable => true,
+                TileInteraction::Crawl => true,
             },
             None => false,
         }
@@ -273,14 +297,7 @@ impl Chunk {
         for x in 0..CHUNK_SIZE {
             for y in 0..CHUNK_SIZE {
                 let tile = &self.tiles[x as usize][y as usize];
-                let color = match tile.texture {
-                    TileTexture::Grass => GREEN,
-                    TileTexture::Water => BLUE,
-                    TileTexture::DeepWater => DARKBLUE,
-                    TileTexture::Mountain => GRAY,
-                    TileTexture::SnowyMountain => WHITE,
-                    TileTexture::Sand => YELLOW,
-                };
+                let color = tile.texture.to_color();
                 draw_rectangle((coords.x + x) as f32, (coords.y + y) as f32, 1., 1., color);
             }
         }

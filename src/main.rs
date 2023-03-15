@@ -34,6 +34,7 @@ fn get_multiplayer_handler() -> Box<dyn MultiplayerHandler> {
 
 #[macroquad::main("2D")]
 async fn main() {
+    rand::srand(macroquad::miniquad::date::now() as _);
     let mut multiplayer_handler = get_multiplayer_handler();
     let mut other_players: HashMap<u32, Player> = HashMap::new();
     let mut controller = Controller::default();
@@ -101,6 +102,13 @@ async fn main() {
                                 debug!("Distance {}", player.get_position().distance(vec2(x, y)));
                                 if player.get_position().distance(vec2(x, y)) < 5. {
                                     player.kill();
+                                    multiplayer_handler.upstream_event(Event::PlayerAction {
+                                        id: 0,
+                                        x: player.get_position().x,
+                                        y: player.get_position().y,
+                                        direction: player.get_direction(),
+                                        action: player::BlockingAction::Dying,
+                                    })
                                 }
                             }
                             _ => (),
@@ -108,6 +116,9 @@ async fn main() {
                     }
                     None => (),
                 },
+                Event::CommandTeleport { x, y } => {
+                    player.set_position(vec2(x,y));
+                }
             }
         }
 
@@ -246,7 +257,7 @@ async fn main() {
                     vx: player2.get_velocity().x,
                     vy: player2.get_velocity().y,
                 };
-                multiplayer_handler.upstream_event(player_update);
+                multiplayer_handler.downstream_event(player_update);
                 let mut action = None;
                 if controller.is(Controll::SecondaryAttack) {
                     action = Some(player::BlockingAction::Attack)
@@ -265,7 +276,7 @@ async fn main() {
                                 direction: player2.get_direction(),
                                 action,
                             };
-                            multiplayer_handler.upstream_event(event)
+                            multiplayer_handler.downstream_event(event)
                         }
                         Err(_) => (),
                     },
@@ -335,6 +346,13 @@ async fn main() {
 
         draw_text("WASD to move player", 10.0, 30.0, 30.0, BLACK);
         draw_text("Q-E to zoom camera", 10.0, 60.0, 30.0, BLACK);
+        draw_text(
+            &format!("{}, {}", player.get_position().x, player.get_position().y),
+            10.0,
+            screen_height() - 10.,
+            30.0,
+            BLACK,
+        );
         // draw_text("WASD to move camera", 30.0, 90.0, 30.0, BLACK);
         // draw_text("F to follow player", 30.0, 120.0, 30.0, BLACK);
         // draw_text("G to toggle generation", 30.0, 150.0, 30.0, BLACK);

@@ -22,12 +22,17 @@ pub enum Event {
     PlayerDisconnect {
         id: u32,
     },
+    CommandTeleport {
+        x: f32,
+        y: f32
+    }
 }
 
 pub trait MultiplayerHandler {
     fn get_events(&mut self) -> Vec<Event>;
     fn upstream_event(&mut self, event: Event);
     fn set_your_player_pos(&self, pos: Vec2, v: Vec2);
+    fn downstream_event(&mut self, event: Event); //Only necessary for local
 }
 
 pub struct DevLocalMultiplayer {
@@ -54,6 +59,10 @@ impl MultiplayerHandler for DevLocalMultiplayer {
     }
 
     fn upstream_event(&mut self, event: Event) {
+        
+    }
+
+    fn downstream_event(&mut self, event: Event) {
         self.events.push(event)
     }
 }

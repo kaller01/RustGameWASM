@@ -1,6 +1,6 @@
 use crate::world::TileInteraction;
 use macroquad::prelude::*;
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, hash::Hash};
 use strum::IntoEnumIterator; // 0.17.1
 use strum_macros::EnumIter; // 0.17.1
 
@@ -20,8 +20,8 @@ pub struct Player<'a> {
     keyframe: KeyFrame,
     keyframe_timer: f32,
     direction: Direction,
-    keyframe_interaction: Interaction,
-    cooldown: Option<(BlockingAction, f32)>,
+    // keyframe_interaction: Interaction,
+    cooldowns: HashMap<BlockingAction, f32>,
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, EnumIter)]
@@ -90,10 +90,10 @@ impl Direction {
     }
 }
 
-#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, EnumIter)]
+#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 enum KeyFrame {
-    Cooldown(u8),
-    Free(u8),
+    Blocking(u8, BlockingAction),
+    Free(u8, Interaction),
 }
 
 impl Player<'_> {
@@ -107,11 +107,10 @@ impl Player<'_> {
             pos: vec2(x, y),
             v: vec2(0., 0.),
             textures: textures,
-            keyframe: KeyFrame::Free(0),
+            keyframe: KeyFrame::Free(0, Interaction::Idle),
             keyframe_timer: 0.,
             direction: Direction::Right,
-            keyframe_interaction: Interaction::Idle,
-            cooldown: None,
+            cooldowns: HashMap::new(),
         }
     }
 
@@ -124,15 +123,14 @@ impl Player<'_> {
         textures: &'a HashMap<(Interaction, Direction), Animation>,
     ) -> Player<'a> {
         Player {
-            name: name,
+            name,
             pos: vec2(x, y),
             v: vec2(vx, vy),
-            textures: textures,
-            keyframe: KeyFrame::Free(0),
+            textures,
+            keyframe: KeyFrame::Free(0, Interaction::Idle),
             keyframe_timer: 0.,
             direction: Direction::Right,
-            keyframe_interaction: Interaction::Idle,
-            cooldown: None,
+            cooldowns: HashMap::new(),
         }
     }
 
@@ -142,17 +140,8 @@ impl Player<'_> {
             _ => vec2(0., 0.),
         };
 
-        let cooldown = match action {
-            BlockingAction::Attack => 0.8,
-            BlockingAction::Roll => 2.,
-            BlockingAction::Block => 1.,
-            BlockingAction::Dying => 3.,
-        };
-
         self.set_velocity(velocity);
-        self.keyframe_interaction = action.to_interaction();
-        self.keyframe = KeyFrame::Cooldown(0);
-        self.cooldown = Some((action, cooldown));
+        self.keyframe = KeyFrame::Blocking(0, action);
     }
 
     pub fn get_direction(&self) -> Direction {
@@ -160,9 +149,16 @@ impl Player<'_> {
     }
 
     pub fn kill(&mut self) {
-        self.pos = vec2(-3., -10.);
+        self.set_action(BlockingAction::Dying)
     }
 
+    fn respawn(&mut self) {
+        let spawn_points: Vec<Vec2> = vec![vec2(-40., -20.), vec2(5., -30.), vec2(-15., -10.)];
+        let index = rand::gen_range(0, spawn_points.len());
+        self.pos = *spawn_points.get(index).unwrap();
+    }
+
+    //used for multiplayer
     pub fn force_action(&mut self, action: BlockingAction, pos: Vec2, direction: Direction) {
         self.pos = pos;
         self.direction = direction;
@@ -170,39 +166,74 @@ impl Player<'_> {
     }
 
     pub fn try_action(&mut self, action: BlockingAction) -> Result<(), ()> {
-        match self.keyframe_interaction {
-            Interaction::Walk | Interaction::Idle => match self.cooldown {
-                Some(_) => Err(()),
-                None => match self.keyframe {
-                    KeyFrame::Cooldown(_) => Err(()),
-                    KeyFrame::Free(_) => {
+        match self.keyframe {
+            KeyFrame::Blocking(_, _) => Err(()),
+            KeyFrame::Free(_, interaction) => match interaction {
+                Interaction::Walk | Interaction::Idle => match self.cooldowns.get(&action) {
+                    Some(_) => Err(()),
+                    None => {
                         self.set_action(action);
                         Ok(())
                     }
                 },
+                _ => Err(()),
             },
-            _ => Err(()),
         }
     }
 
     fn advance_keyframe(&mut self) {
         match self.keyframe {
-            KeyFrame::Cooldown(frame) => self.keyframe = KeyFrame::Cooldown(frame + 1),
-            KeyFrame::Free(frame) => self.keyframe = KeyFrame::Free(frame + 1),
+            KeyFrame::Blocking(frame, action) => {
+                self.keyframe = KeyFrame::Blocking(frame + 1, action)
+            }
+            KeyFrame::Free(frame, interaction) => {
+                self.keyframe = KeyFrame::Free(frame + 1, interaction)
+            }
         }
     }
 
     fn current_keyframe(&mut self) -> u8 {
         match self.keyframe {
-            KeyFrame::Cooldown(frame) | KeyFrame::Free(frame) => frame,
+            KeyFrame::Blocking(frame, _) | KeyFrame::Free(frame, _) => frame,
         }
     }
 
+    //Called when animation is changing
+    fn free_keyframe(&mut self, next_interaction: Interaction) {
+        match self.keyframe {
+            KeyFrame::Blocking(_, action) => match action {
+                BlockingAction::Attack => {
+                    self.cooldowns.insert(action, 0.3);
+                }
+                BlockingAction::Roll => {
+                    self.cooldowns.insert(action, 1.);
+                }
+                BlockingAction::Dying => self.respawn(),
+                _ => (),
+            },
+            KeyFrame::Free(_, _) => {}
+        }
+        self.keyframe = KeyFrame::Free(0, next_interaction);
+    }
+
+    //called when cooldown is reset.
+    fn reset_cooldown(&mut self, from_action: BlockingAction) {
+        match from_action {
+            BlockingAction::Attack => (),
+            BlockingAction::Roll => (),
+            BlockingAction::Block => (),
+            BlockingAction::Dying => self.set_position(vec2(0., 0.)),
+        }
+        self.cooldowns.remove(&from_action);
+    }
+
     pub fn render(&mut self, text_params: &TextParams) {
-        let texture_data = self
-            .textures
-            .get(&(self.keyframe_interaction, self.direction))
-            .unwrap();
+        let interaction = match self.keyframe {
+            KeyFrame::Blocking(_, action) => action.to_interaction(),
+            KeyFrame::Free(_, interaction) => interaction,
+        };
+
+        let texture_data = self.textures.get(&(interaction, self.direction)).unwrap();
         let texture = texture_data
             .textures
             .get(self.current_keyframe() as usize)
@@ -223,8 +254,8 @@ impl Player<'_> {
     }
     pub fn set_velocity(&mut self, velocity: Vec2) {
         match self.keyframe {
-            KeyFrame::Cooldown(_) => (),
-            KeyFrame::Free(_) => self.v = velocity,
+            KeyFrame::Blocking(_, _) => (),
+            KeyFrame::Free(_, _) => self.v = velocity,
         }
     }
 }
@@ -243,55 +274,75 @@ impl Entity for Player<'_> {
     }
 
     fn update(&mut self, tile_interaction: &TileInteraction, time: f32) {
-        let texture_data = self
-            .textures
-            .get(&(self.keyframe_interaction, self.direction))
-            .unwrap();
-        let time_step = texture_data.time_step;
-        let steps = texture_data.textures.len();
+        let next_possible_interaction = match tile_interaction {
+            TileInteraction::Block => Interaction::Idle,
+            TileInteraction::Walkable => Interaction::Walk,
+            TileInteraction::Swimmable => Interaction::Swim,
+            TileInteraction::Crawl => Interaction::Walk,
+        };
 
-        match self.keyframe {
-            KeyFrame::Cooldown(_frame) | KeyFrame::Free(_frame) => {
-                if self.keyframe_timer > time_step {
-                    self.advance_keyframe();
-                    if self.current_keyframe() == steps as u8 {
-                        self.keyframe = KeyFrame::Free(0)
-                    }
-                    self.keyframe_timer = 0.;
-                }
-            }
-        }
+        let interaction = match self.keyframe {
+            KeyFrame::Blocking(_, action) => action.to_interaction(),
+            KeyFrame::Free(_, interaction) => interaction,
+        };
 
-        match self.keyframe {
-            KeyFrame::Cooldown(_) => (),
-            KeyFrame::Free(_) => {
-                self.keyframe_interaction = match tile_interaction {
-                    TileInteraction::Block => Interaction::Idle,
-                    TileInteraction::Walkable => Interaction::Walk,
-                    TileInteraction::Swimmable => Interaction::Swim,
-                };
-                match Direction::from_vec2(self.v) {
-                    None => {
-                        self.keyframe_interaction = match tile_interaction {
-                            TileInteraction::Swimmable => Interaction::Swim,
-                            _ => Interaction::Idle,
+        {
+            //Keyframe timer
+            let texture_data = self.textures.get(&(interaction, self.direction)).unwrap();
+            let time_step = texture_data.time_step;
+            let steps = texture_data.textures.len();
+            if self.keyframe_timer > time_step {
+                self.advance_keyframe();
+                if self.current_keyframe() == steps as u8 {
+                    match self.keyframe {
+                        //Keyframe loop complete
+                        KeyFrame::Blocking(_, _) => self.free_keyframe(next_possible_interaction),
+                        KeyFrame::Free(_, interaction) => {
+                            if interaction != next_possible_interaction {
+                                self.free_keyframe(next_possible_interaction);
+                            } else {
+                                //Keyframe looping
+                                self.keyframe = KeyFrame::Free(0, interaction);
+                            }
                         }
                     }
-                    Some(direction) => self.direction = direction,
+                } else {
+                    //If keyframe is free, change animation mid keyframe
+                    match self.keyframe {
+                        KeyFrame::Blocking(_, _) => (),
+                        KeyFrame::Free(_, interaction) => {
+                            if interaction != next_possible_interaction {
+                                self.free_keyframe(next_possible_interaction)
+                            }
+                        }
+                    }
                 }
+                self.keyframe_timer = 0.;
             }
+            self.keyframe_timer += time;
         }
 
-        self.keyframe_timer += time;
-        match self.cooldown {
-            Some((action, cooldown)) => {
-                let remaining_cooldown = cooldown - time;
-                self.cooldown = Some((action, remaining_cooldown));
-                if remaining_cooldown < 0. {
-                    self.cooldown = None
-                }
+        //Direction is allowed to be changed if the keyframe is free
+        match self.keyframe {
+            KeyFrame::Blocking(_, _) => (),
+            KeyFrame::Free(_, _) => match Direction::from_vec2(self.v) {
+                None => {}
+                Some(direction) => self.direction = direction,
+            },
+        }
+
+        //Cooldown timer
+        let mut to_be_removed = Vec::new();
+        for (action, cooldown) in self.cooldowns.iter_mut() {
+            let remaining_cooldown = *cooldown - time;
+            if remaining_cooldown < 0. {
+                to_be_removed.push(action.clone());
+            } else {
+                *cooldown = remaining_cooldown;
             }
-            None => (),
+        }
+        for to_be_removed in to_be_removed {
+            self.reset_cooldown(to_be_removed);
         }
     }
 }
@@ -310,7 +361,7 @@ impl fmt::Display for Interaction {
             Interaction::Attack => write!(f, "attack"),
             Interaction::Roll => write!(f, "roll"),
             Interaction::Block => write!(f, "block"),
-            Interaction::Dying => todo!(),
+            Interaction::Dying => write!(f, "death"),
         }
     }
 }
@@ -332,7 +383,24 @@ pub async fn load_textures() -> HashMap<(Interaction, Direction), Animation> {
     for action in Interaction::iter() {
         match action {
             Interaction::Dying => {
-            },
+                for direction in Direction::iter() {
+                    let mut textures = Vec::new();
+                    for step in vec!["1", "2", "3", "4"] {
+                        let texture = load_texture(&format!("textures/{}{}.png", action, step))
+                            .await
+                            .unwrap();
+                        texture.set_filter(FilterMode::Nearest);
+                        textures.push(texture)
+                    }
+                    texture_map.insert(
+                        (action, direction),
+                        Animation {
+                            time_step: 0.3,
+                            textures,
+                        },
+                    );
+                }
+            }
             _ => {
                 for direction in Direction::iter() {
                     let mut textures = Vec::new();

@@ -52,11 +52,11 @@ async fn main() {
 
     let mut world = World::generate();
 
-    let textures = load_textures().await;
+    let (textures, texture_map) = load_textures().await;
 
-    let mut player = Player::new_playable(-3., -10., &textures);
+    let mut player = Player::new_playable(-3., -10., &texture_map, &textures);
 
-    let mut player2 = Player::new_other(String::from("Player2"), 10., 10., 0., 0., &textures);
+    let mut player2 = Player::new_other(String::from("Player2"), 10., 10., 0., 0., &texture_map, &textures);
 
     let mut player_joystick =
         Joystick::new(screen_width() * 0.8, screen_height() * 0.8, size * 0.1);
@@ -81,7 +81,7 @@ async fn main() {
                         other_player.set_velocity(vec2(vx, vy))
                     }
                     None => {
-                        let new_player = Player::new_other(name, x, y, vx, vy, &textures);
+                        let new_player = Player::new_other(name, x, y, vx, vy, &texture_map, &textures);
                         other_players.insert(id, new_player);
                     }
                 },

@@ -1,5 +1,6 @@
 use crate::world::TileInteraction;
 use macroquad::prelude::*;
+use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt, hash::Hash};
 use strum::IntoEnumIterator; // 0.17.1
 use strum_macros::EnumIter; // 0.17.1
@@ -16,7 +17,8 @@ pub struct Player<'a> {
     name: String,
     pos: Vec2,
     v: Vec2,
-    textures: &'a HashMap<(Interaction, Direction), Animation>,
+    animations: &'a HashMap<(Interaction, Direction), Animation>,
+    textures: &'a Texture2D,
     keyframe: KeyFrame,
     keyframe_timer: f32,
     direction: Direction,
@@ -100,13 +102,15 @@ impl Player<'_> {
     pub fn new_playable<'a>(
         x: f32,
         y: f32,
-        textures: &'a HashMap<(Interaction, Direction), Animation>,
+        animations: &'a HashMap<(Interaction, Direction), Animation>,
+        textures: &'a Texture2D,
     ) -> Player<'a> {
         Player {
             name: "You".to_owned(),
             pos: vec2(x, y),
             v: vec2(0., 0.),
-            textures: textures,
+            animations,
+            textures,
             keyframe: KeyFrame::Free(0, Interaction::Idle),
             keyframe_timer: 0.,
             direction: Direction::Right,
@@ -120,12 +124,14 @@ impl Player<'_> {
         y: f32,
         vx: f32,
         vy: f32,
-        textures: &'a HashMap<(Interaction, Direction), Animation>,
+        animations: &'a HashMap<(Interaction, Direction), Animation>,
+        textures: &'a Texture2D,
     ) -> Player<'a> {
         Player {
             name,
             pos: vec2(x, y),
             v: vec2(vx, vy),
+            animations,
             textures,
             keyframe: KeyFrame::Free(0, Interaction::Idle),
             keyframe_timer: 0.,
@@ -233,23 +239,37 @@ impl Player<'_> {
             KeyFrame::Free(_, interaction) => interaction,
         };
 
-        let texture_data = self.textures.get(&(interaction, self.direction)).unwrap();
-        let texture = texture_data
-            .textures
-            .get(self.current_keyframe() as usize)
-            .unwrap();
+        match self.animations.get(&(interaction, self.direction)) {
+            Some(texture_data) => {
+                let pixel_pos = texture_data
+                    .texture_pos
+                    .get(self.current_keyframe() as usize)
+                    .unwrap();
 
-        draw_texture_ex(
-            *texture,
-            self.pos.x - 8.,
-            self.pos.y - 8.,
-            WHITE,
-            DrawTextureParams {
-                dest_size: Some(vec2(16., 16.)),
-                ..Default::default()
-            },
-        );
-        // draw_circle(self.pos.x, self.pos.y, 0.1, GREEN);
+                
+
+                draw_texture_ex(
+                    *self.textures,
+                    self.pos.x - 8.,
+                    self.pos.y - 8.,
+                    WHITE,
+                    DrawTextureParams {
+                        dest_size: Some(vec2(16., 16.)),
+                        source: Some(Rect::new(
+                            pixel_pos.x,
+                            pixel_pos.y,
+                            pixel_pos.w,
+                            pixel_pos.h,
+                        )),
+                        ..Default::default()
+                    },
+                );
+            }
+            None => {
+                draw_circle(self.pos.x, self.pos.y, 1., RED);
+            }
+        }
+
         draw_text_ex(&self.name, self.pos.x + 1., self.pos.y - 2., *text_params);
     }
     pub fn set_velocity(&mut self, velocity: Vec2) {
@@ -288,38 +308,44 @@ impl Entity for Player<'_> {
 
         {
             //Keyframe timer
-            let texture_data = self.textures.get(&(interaction, self.direction)).unwrap();
-            let time_step = texture_data.time_step;
-            let steps = texture_data.textures.len();
-            if self.keyframe_timer > time_step {
-                self.advance_keyframe();
-                if self.current_keyframe() == steps as u8 {
-                    match self.keyframe {
-                        //Keyframe loop complete
-                        KeyFrame::Blocking(_, _) => self.free_keyframe(next_possible_interaction),
-                        KeyFrame::Free(_, interaction) => {
-                            if interaction != next_possible_interaction {
-                                self.free_keyframe(next_possible_interaction);
-                            } else {
-                                //Keyframe looping
-                                self.keyframe = KeyFrame::Free(0, interaction);
+            match self.animations.get(&(interaction, self.direction)) {
+                Some(texture_data) => {
+                    let time_step = texture_data.time_step;
+                    let steps = texture_data.texture_pos.len();
+                    if self.keyframe_timer > time_step {
+                        self.advance_keyframe();
+                        if self.current_keyframe() == steps as u8 {
+                            match self.keyframe {
+                                //Keyframe loop complete
+                                KeyFrame::Blocking(_, _) => {
+                                    self.free_keyframe(next_possible_interaction)
+                                }
+                                KeyFrame::Free(_, interaction) => {
+                                    if interaction != next_possible_interaction {
+                                        self.free_keyframe(next_possible_interaction);
+                                    } else {
+                                        //Keyframe looping
+                                        self.keyframe = KeyFrame::Free(0, interaction);
+                                    }
+                                }
+                            }
+                        } else {
+                            //If keyframe is free, change animation mid keyframe
+                            match self.keyframe {
+                                KeyFrame::Blocking(_, _) => (),
+                                KeyFrame::Free(_, interaction) => {
+                                    if interaction != next_possible_interaction {
+                                        self.free_keyframe(next_possible_interaction)
+                                    }
+                                }
                             }
                         }
+                        self.keyframe_timer = 0.;
                     }
-                } else {
-                    //If keyframe is free, change animation mid keyframe
-                    match self.keyframe {
-                        KeyFrame::Blocking(_, _) => (),
-                        KeyFrame::Free(_, interaction) => {
-                            if interaction != next_possible_interaction {
-                                self.free_keyframe(next_possible_interaction)
-                            }
-                        }
-                    }
+                    self.keyframe_timer += time;
                 }
-                self.keyframe_timer = 0.;
+                None => {}
             }
-            self.keyframe_timer += time;
         }
 
         //Direction is allowed to be changed if the keyframe is free
@@ -348,8 +374,8 @@ impl Entity for Player<'_> {
 }
 
 pub struct Animation {
+    texture_pos: Vec<PixelPos>,
     time_step: f32,
-    textures: Vec<Texture2D>,
 }
 
 impl fmt::Display for Interaction {
@@ -377,8 +403,34 @@ impl fmt::Display for Direction {
     }
 }
 
-pub async fn load_textures() -> HashMap<(Interaction, Direction), Animation> {
+#[derive(Debug, Deserialize, Serialize)]
+struct Spritesheet {
+    #[serde(rename = "frames")]
+    frames: HashMap<String, Frame>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Frame {
+    #[serde(rename = "frame")]
+    pos: PixelPos,
+}
+
+#[derive(Debug, Deserialize, Serialize,Clone, Copy)]
+struct PixelPos {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+}
+
+pub async fn load_textures() -> (Texture2D, HashMap<(Interaction, Direction), Animation>) {
     let mut texture_map: HashMap<(Interaction, Direction), Animation> = HashMap::new();
+
+    let texture = load_texture("textures/spritesheet.png").await.unwrap();
+    texture.set_filter(FilterMode::Nearest);
+    let spritesheet = load_string("textures/spritesheet.json").await.unwrap();
+    let spritesheet: Spritesheet = serde_json::from_str(&spritesheet).unwrap();
+    println!("{:?}", spritesheet);
 
     for action in Interaction::iter() {
         match action {
@@ -386,17 +438,14 @@ pub async fn load_textures() -> HashMap<(Interaction, Direction), Animation> {
                 for direction in Direction::iter() {
                     let mut textures = Vec::new();
                     for step in vec!["1", "2", "3", "4"] {
-                        let texture = load_texture(&format!("textures/{}{}.png", action, step))
-                            .await
-                            .unwrap();
-                        texture.set_filter(FilterMode::Nearest);
-                        textures.push(texture)
+                        let frame = spritesheet.frames.get(&format!("{}{}.png", action, step)).unwrap();
+                        textures.push(frame.pos);
                     }
                     texture_map.insert(
                         (action, direction),
                         Animation {
+                            texture_pos: textures,
                             time_step: 0.3,
-                            textures,
                         },
                     );
                 }
@@ -409,12 +458,8 @@ pub async fn load_textures() -> HashMap<(Interaction, Direction), Animation> {
                         _ => vec!["1", "2", "3", "4"],
                     };
                     for step in steps {
-                        let texture =
-                            load_texture(&format!("textures/{} {}{}.png", action, direction, step))
-                                .await
-                                .unwrap();
-                        texture.set_filter(FilterMode::Nearest);
-                        textures.push(texture)
+                        let frame = spritesheet.frames.get(&format!("{} {}{}.png", action, direction, step)).unwrap();
+                        textures.push(frame.pos);
                     }
 
                     let time_step = match action {
@@ -430,13 +475,20 @@ pub async fn load_textures() -> HashMap<(Interaction, Direction), Animation> {
                     texture_map.insert(
                         (action, direction),
                         Animation {
+                            texture_pos: textures,
                             time_step,
-                            textures,
                         },
                     );
                 }
             }
         }
     }
-    texture_map
+
+   (texture, texture_map)
 }
+
+// pub async fn load_textures() -> HashMap<(Interaction, Direction), Animation> {
+//     let mut texture_map: HashMap<(Interaction, Direction), Animation> = HashMap::new();
+
+//     texture_map
+// }

@@ -1,14 +1,17 @@
-use crate::{multiplayer::Event, player::load_textures, controlls::ToggleControll};
+use crate::{controlls::ToggleControll, multiplayer::Event, player::load_textures};
 use controlls::{Controll, Controller};
 use macroquad::prelude::*;
 use macroquad_virtual_joystick::{Joystick, JoystickDirection};
 use multiplayer::MultiplayerHandler;
 use player::{Entity, Player};
+// use quad_url::*;
 use std::collections::HashMap;
+use touchbutton::Button;
 
 pub mod controlls;
 pub mod multiplayer;
 pub mod player;
+pub mod touchbutton;
 pub mod world;
 
 #[cfg(target_arch = "wasm32")]
@@ -32,6 +35,9 @@ fn get_multiplayer_handler() -> Box<dyn MultiplayerHandler> {
     Box::new(multiplayer::DevLocalMultiplayer::new())
 }
 
+const MAX_ZOOM: f32 = 0.01;
+const MIN_ZOOM: f32 = 0.1;
+
 #[macroquad::main("2D")]
 async fn main() {
     rand::srand(macroquad::miniquad::date::now() as _);
@@ -39,16 +45,14 @@ async fn main() {
     let mut other_players: HashMap<u32, Player> = HashMap::new();
     let mut controller = Controller::default();
 
-    let mut screen_size = (screen_width(), screen_height());
-    let mut size = if screen_width() > screen_height() {
-        screen_width()
-    } else {
-        screen_height()
-    };
     //Changable settings (camera, player etc)
     let mut target = vec2(0., 0.);
-    let mut z = 0.05;
-    const MAX_ZOOM: f32 = 0.01;
+    let mut z = 0.04;
+
+    let mut screen_size = (screen_width(), screen_height());
+    if screen_height() > screen_width() {
+        controller.set(ToggleControll::Touch, true);
+    }
 
     let mut world = World::generate();
 
@@ -56,15 +60,27 @@ async fn main() {
 
     let mut player = Player::new_playable(-3., -10., &texture_map, &textures);
 
-    let mut player2 = Player::new_other(String::from("Player2"), 10., 10., 0., 0., &texture_map, &textures);
-
-    let mut player_joystick =
-        Joystick::new(screen_width() * 0.8, screen_height() * 0.8, size * 0.1);
-    let mut camera_joytstick =
-        Joystick::new(screen_width() * 0.2, screen_height() * 0.8, size * 0.1);
+    let mut player2 = Player::new_other(
+        String::from("Player2"),
+        10.,
+        10.,
+        0.,
+        0.,
+        &texture_map,
+        &textures,
+    );
+    let (
+        mut player_joystick,
+        mut attack_button,
+        mut roll_button,
+        mut zoom_out_button,
+        mut zoom_in_button,
+    ) = make_touch_controlls();
 
     loop {
         clear_background(LIGHTGRAY);
+
+        controller.update();
 
         for event in multiplayer_handler.get_events() {
             match event {
@@ -81,7 +97,8 @@ async fn main() {
                         other_player.set_velocity(vec2(vx, vy))
                     }
                     None => {
-                        let new_player = Player::new_other(name, x, y, vx, vy, &texture_map, &textures);
+                        let new_player =
+                            Player::new_other(name, x, y, vx, vy, &texture_map, &textures);
                         other_players.insert(id, new_player);
                     }
                 },
@@ -117,7 +134,7 @@ async fn main() {
                     None => (),
                 },
                 Event::CommandTeleport { x, y } => {
-                    player.set_position(vec2(x,y));
+                    player.set_position(vec2(x, y));
                 }
             }
         }
@@ -126,17 +143,13 @@ async fn main() {
 
         if screen_size != (screen_width(), screen_height()) {
             screen_size = (screen_width(), screen_height());
-
-            size = if screen_width() > screen_height() {
-                screen_width()
-            } else {
-                screen_height()
-            };
-
-            player_joystick =
-                Joystick::new(screen_width() * 0.8, screen_height() * 0.8, size * 0.1);
-            camera_joytstick =
-                Joystick::new(screen_width() * 0.2, screen_height() * 0.8, size * 0.1);
+            (
+                player_joystick,
+                attack_button,
+                roll_button,
+                zoom_out_button,
+                zoom_in_button,
+            ) = make_touch_controlls();
         }
 
         //Handle controlls
@@ -171,7 +184,12 @@ async fn main() {
                 }
                 velocity = velocity.normalize_or_zero() * speed;
                 player.set_velocity(velocity);
-                target = player.get_position();
+                if controller.is_enabled(ToggleControll::Touch) {
+                    let map_height = 1. / (z * (screen_width() / screen_height())) * 2.;
+                    target = player.get_position() + vec2(0., map_height * 0.15);
+                } else {
+                    target = player.get_position();
+                }
 
                 //Joystick
                 let joystick_event = player_joystick.update();
@@ -192,14 +210,26 @@ async fn main() {
 
             let mut action = None;
 
-            let joystick_event = camera_joytstick.update();
-            match joystick_event.direction {
-                JoystickDirection::Up => z *= 1.01,
-                JoystickDirection::Down => z *= 0.99,
-                JoystickDirection::Left => action = Some(player::BlockingAction::Attack),
-                JoystickDirection::Right => action = Some(player::BlockingAction::Roll),
-                _ => (),
+            // let joystick_event = camera_joytstick.update();
+            // match joystick_event.direction {
+            //     JoystickDirection::Up => z *= 1.01,
+            //     JoystickDirection::Down => z *= 0.99,
+            //     JoystickDirection::Left => action = Some(player::BlockingAction::Attack),
+            //     JoystickDirection::Right => action = Some(player::BlockingAction::Roll),
+            //     _ => (),
+            // }
+
+            zoom_out_button.update();
+            zoom_in_button.update();
+            if zoom_in_button.down() {
+                z +=0.001;
             }
+            if zoom_out_button.down() {
+                z -= 0.001;
+            }
+
+            attack_button.update();
+            roll_button.update();
 
             if controller.is(Controll::Attack) {
                 action = Some(player::BlockingAction::Attack)
@@ -209,6 +239,12 @@ async fn main() {
             }
             if controller.is(Controll::Block) {
                 action = Some(player::BlockingAction::Block)
+            }
+            if attack_button.down() {
+                action = Some(player::BlockingAction::Attack)
+            }
+            if roll_button.down() {
+                action = Some(player::BlockingAction::Roll)
             }
 
             match action {
@@ -228,7 +264,7 @@ async fn main() {
 
         {
             //Player 2 controlls
-            if controller.enabled(ToggleControll::SecondaryPlayer) {
+            if controller.is_enabled(ToggleControll::SecondaryPlayer) {
                 player2.update(&world::TileInteraction::Walkable, get_frame_time());
                 let speed = 20.;
                 let mut velocity = vec2(0., 0.);
@@ -287,8 +323,13 @@ async fn main() {
 
         //Set camera for world
 
-        if !controller.enabled(ToggleControll::FreeZoom) && z < MAX_ZOOM {
-            z = MAX_ZOOM
+        if !controller.is_enabled(ToggleControll::FreeZoom) {
+            if z < MAX_ZOOM {
+                z = MAX_ZOOM
+            }
+            if z > MIN_ZOOM {
+                z = MIN_ZOOM
+            }
         }
 
         let zoom = vec2(z, -z * (screen_width() / screen_height()));
@@ -296,7 +337,7 @@ async fn main() {
         set_camera(&Camera2D {
             target: target,
             zoom: zoom,
-            // viewport: Some((0,0,800,800)),
+            // viewport: Some((100,100,800,800)),
             // viewport: Some((0,(0.2*screen_height()).round() as i32,(screen_width()).round() as i32,(0.8*screen_height()).round() as i32)),
             ..Default::default()
         });
@@ -307,7 +348,7 @@ async fn main() {
         let corner = target - size / 2.;
         let view = Rect::new(corner.x, corner.y, size.x, size.y);
 
-        if controller.enabled(ToggleControll::TerrainGeneration) {
+        if controller.is_enabled(ToggleControll::TerrainGeneration) {
             world.generate_at(view);
         }
 
@@ -320,7 +361,7 @@ async fn main() {
             ..Default::default()
         };
 
-        let debug_render = controller.enabled(ToggleControll::DebugHitbox);
+        let debug_render = controller.is_enabled(ToggleControll::DebugHitbox);
 
         //render world within camera view
         world.render(view);
@@ -328,13 +369,13 @@ async fn main() {
         world.update_entity(&mut player, get_frame_time());
 
         for (_, other_player) in other_players.iter_mut() {
-            if controller.enabled(ToggleControll::OtherAnimations) {
+            if controller.is_enabled(ToggleControll::OtherAnimations) {
                 world.update_entity(other_player, get_frame_time());
             }
             other_player.render(&text_params, debug_render);
         }
 
-        player.render(&text_params,debug_render);
+        player.render(&text_params, debug_render);
 
         // if z <= MAX_ZOOM {
         //     if(controller.is(Controll::ToggleDev)){
@@ -349,21 +390,84 @@ async fn main() {
         draw_text("WASD to move player", 10.0, 30.0, 30.0, BLACK);
         draw_text("Q-E to zoom camera", 10.0, 60.0, 30.0, BLACK);
         draw_text(
-            &format!("{}, {}", player.get_position().x, player.get_position().y),
+            &format!(
+                "{:.0}, {:.0}",
+                player.get_position().x,
+                player.get_position().y
+            ),
             10.0,
             screen_height() - 10.,
             30.0,
             BLACK,
         );
-        // draw_text("WASD to move camera", 30.0, 90.0, 30.0, BLACK);
-        // draw_text("F to follow player", 30.0, 120.0, 30.0, BLACK);
-        // draw_text("G to toggle generation", 30.0, 150.0, 30.0, BLACK);
-        // draw_text("T to toggle touch controls", 30.0, 180.0, 30.0, BLACK);
-        if controller.enabled(ToggleControll::Touch) {
+        if controller.is_enabled(ToggleControll::Touch) {
             player_joystick.render();
-            camera_joytstick.render();
+            // camera_joytstick.render();
+            attack_button.render();
+            roll_button.render();
+            zoom_in_button.render();
+            zoom_out_button.render();
         }
+        // let mut my_boolean = true;
+
+        // egui_macroquad::ui(|ctx| {
+        //     egui::CentralPanel::default()
+        //         .frame(egui::Frame::none().fill(egui::Color32::TRANSPARENT))
+        //         .show(ctx, |ui| {
+        //             ui.add(egui::Slider::new(&mut z, 0.001..=0.1).text("My value"));
+        //             ui.add(egui::Label::new("Hello World!"));
+        //             ui.label("A shorter and more convenient way to add a label.");
+        //             if ui.button("Click me").clicked() {
+        //                 // take some action here
+        //             }
+        //             ui.checkbox(&mut my_boolean, "Checkbox");
+        //         });
+
+        //     // egui::Window::new("Tutorial").show(ctx, |ui| {
+        //     //     ui.label("Test");
+        //     //     if ui.button("Save").clicked() {
+        //     //         println!("Hola mi amigos")
+        //     //     }
+        //     // });
+        // });
+        // egui_macroquad::draw();
 
         next_frame().await
     }
+}
+
+fn make_touch_controlls() -> (Joystick, Button, Button, Button, Button) {
+    let size = if screen_width() > screen_height() {
+        screen_width()
+    } else {
+        screen_height()
+    };
+
+    let player_joystick = Joystick::new(screen_width() * 0.7, screen_height() * 0.8, size * 0.15);
+    // let mut camera_joytstick =
+    //     Joystick::new(screen_width() * 0.2, screen_height() * 0.8, size * 0.1);
+    let attack_button = Button::circle(
+        vec2(screen_width() * 0.2, screen_height() * 0.75),
+        size * 0.1,
+    );
+    let roll_button = Button::circle(
+        vec2(screen_width() * 0.2, screen_height() * 0.85),
+        size * 0.1,
+    );
+    let zoom_out_button = Button::rectangle(
+        vec2(screen_width() * 0.4, screen_height() * 0.97),
+        vec2(size * 0.1, size * 0.05),
+    );
+
+    let zoom_in_button = Button::rectangle(
+        vec2(screen_width() * 0.6, screen_height() * 0.97),
+        vec2(size * 0.1, size * 0.05),
+    );
+    (
+        player_joystick,
+        attack_button,
+        roll_button,
+        zoom_out_button,
+        zoom_in_button,
+    )
 }

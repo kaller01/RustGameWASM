@@ -130,7 +130,6 @@ pub extern "C" fn update_player(js_object: JsObject, id: u32, x: f32, y: f32, vx
         vx,
         vy,
     };
-    // debug!("{:?}", event);
     EVENT_DOWNSTREAM.lock().unwrap().push_back(event);
 }
 

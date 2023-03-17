@@ -81,7 +81,7 @@ impl KeyMapped for ToggleControll {
 impl ToggleControll {
     fn default(&self) -> bool {
         match self {
-            ToggleControll::Touch => true,
+            ToggleControll::Touch => false,
             ToggleControll::FreeCamera => false,
             ToggleControll::FreeZoom => false,
             ToggleControll::TerrainGeneration => true,
@@ -107,16 +107,22 @@ impl Controller {
         Controller { toggles }
     }
 
-    pub fn enabled(&mut self, toggle: ToggleControll) -> bool {
-        let key_pressed = is_key_pressed(toggle.to_key());
-        let enabled = self.toggles.get(&toggle).unwrap();
-        if key_pressed {
-            let tmp = enabled.to_owned();
-            self.toggles.insert(toggle, !enabled.to_owned());
-            return !tmp;
-        } else {
-            return *enabled;
+    pub fn update(&mut self) {
+        for toggle in ToggleControll::iter() {
+            let key_pressed = is_key_pressed(toggle.to_key());
+            let enabled = self.toggles.get(&toggle).unwrap();
+            if key_pressed {
+                self.toggles.insert(toggle, !enabled.to_owned());
+            }
         }
+    }
+
+    pub fn set(&mut self, toggle: ToggleControll, enabled: bool){
+        self.toggles.insert(toggle, enabled);
+    }
+
+    pub fn is_enabled(&self, toggle: ToggleControll) -> bool {
+        return *self.toggles.get(&toggle).unwrap();
     }
 
     pub fn is(&mut self, controll: Controll) -> bool {

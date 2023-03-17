@@ -4,6 +4,10 @@ use strum_macros::EnumIter; // 0.17.1
 
 use macroquad::prelude::{is_key_down, is_key_pressed, KeyCode};
 
+trait KeyMapped {
+    fn to_key(&self) -> KeyCode;
+}
+
 #[derive(Eq, Hash, PartialEq, Clone, Copy, EnumIter)]
 pub enum Controll {
     MoveUp,
@@ -13,131 +17,109 @@ pub enum Controll {
     Attack,
     Roll,
     Block,
-    ToggleTouch,
     //Camera
     ZoomIn,
     ZoomOut,
     ToggleCamera,
-    //Dev
-    ToggleMaxZoom,
-    ToggleGeneration,
-    ToggleOtherAnimation,
     //Player 2
-    ToggleSecondaryPlayer,
     MoveSecondaryUp,
     MoveSecondaryDown,
     MoveSecondaryLeft,
     MoveSecondaryRight,
     SecondaryAttack,
-    SecondaryRoll
+    SecondaryRoll,
 }
 
-#[derive(Eq, Hash, PartialEq, Clone, Copy, EnumIter)]
-pub enum Setting {
-    Toggle(bool),
+#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, EnumIter)]
+pub enum ToggleControll {
+    Touch,
+    FreeCamera,
+    FreeZoom,
+    TerrainGeneration,
+    OtherAnimations,
+    SecondaryPlayer,
+    DebugHitbox,
+}
+
+impl KeyMapped for Controll {
+    fn to_key(&self) -> KeyCode {
+        match self {
+            Controll::MoveUp => KeyCode::W,
+            Controll::MoveDown => KeyCode::S,
+            Controll::MoveLeft => KeyCode::A,
+            Controll::MoveRight => KeyCode::D,
+            Controll::Attack => KeyCode::J,
+            Controll::Roll => KeyCode::K,
+            Controll::Block => KeyCode::L,
+            Controll::ZoomIn => KeyCode::E,
+            Controll::ZoomOut => KeyCode::Q,
+            Controll::ToggleCamera => KeyCode::F,
+            Controll::MoveSecondaryUp => KeyCode::Kp8,
+            Controll::MoveSecondaryDown => KeyCode::Kp2,
+            Controll::MoveSecondaryLeft => KeyCode::Kp4,
+            Controll::MoveSecondaryRight => KeyCode::Kp6,
+            Controll::SecondaryAttack => KeyCode::Kp0,
+            Controll::SecondaryRoll => KeyCode::KpMultiply,
+        }
+    }
+}
+
+impl KeyMapped for ToggleControll {
+    fn to_key(&self) -> KeyCode {
+        match self {
+            ToggleControll::Touch => KeyCode::T,
+            ToggleControll::FreeCamera => KeyCode::F,
+            ToggleControll::FreeZoom => KeyCode::I,
+            ToggleControll::TerrainGeneration => KeyCode::G,
+            ToggleControll::OtherAnimations => KeyCode::O,
+            ToggleControll::SecondaryPlayer => KeyCode::Kp5,
+            ToggleControll::DebugHitbox => KeyCode::H,
+        }
+    }
+}
+
+impl ToggleControll {
+    fn default(&self) -> bool {
+        match self {
+            ToggleControll::Touch => true,
+            ToggleControll::FreeCamera => false,
+            ToggleControll::FreeZoom => false,
+            ToggleControll::TerrainGeneration => true,
+            ToggleControll::OtherAnimations => true,
+            ToggleControll::SecondaryPlayer => false,
+            ToggleControll::DebugHitbox => false,
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Clone)]
 pub struct Controller {
-    keymap: HashMap<Controll, KeyCode>,
-    settings: HashMap<Controll, Setting>,
+    toggles: HashMap<ToggleControll, bool>,
 }
 
 impl Controller {
     pub fn default() -> Controller {
-        let mut keymap = HashMap::new();
-        for controll in Controll::iter() {
-            let keycode = match controll {
-                Controll::MoveUp => KeyCode::W,
-                Controll::MoveDown => KeyCode::S,
-                Controll::MoveLeft => KeyCode::A,
-                Controll::MoveRight => KeyCode::D,
-                Controll::Attack => KeyCode::J,
-                Controll::Roll => KeyCode::K,
-                Controll::Block => KeyCode::L,
-                Controll::ToggleTouch => KeyCode::T,
-                Controll::ZoomIn => KeyCode::E,
-                Controll::ZoomOut => KeyCode::Q,
-                Controll::ToggleCamera => KeyCode::F,
-                Controll::ToggleMaxZoom => KeyCode::I,
-                Controll::ToggleGeneration => KeyCode::G,
-                Controll::ToggleOtherAnimation => KeyCode::O,
-                Controll::ToggleSecondaryPlayer => KeyCode::Kp5,
-                Controll::MoveSecondaryUp => KeyCode::Kp8,
-                Controll::MoveSecondaryDown => KeyCode::Kp2,
-                Controll::MoveSecondaryLeft => KeyCode::Kp4,
-                Controll::MoveSecondaryRight => KeyCode::Kp6,
-                Controll::SecondaryAttack => KeyCode::Kp0,
-                Controll::SecondaryRoll => KeyCode::KpMultiply
-            };
-            keymap.insert(controll, keycode);
+        let mut toggles = HashMap::new();
+        for toggle_controll in ToggleControll::iter() {
+            toggles.insert(toggle_controll, toggle_controll.default());
         }
-        Controller {
-            keymap,
-            settings: HashMap::from([
-                (Controll::ToggleMaxZoom, Setting::Toggle(false)),
-                (Controll::ToggleCamera, Setting::Toggle(false)),
-                (Controll::ToggleGeneration, Setting::Toggle(true)),
-                (Controll::ToggleSecondaryPlayer, Setting::Toggle(false)),
-                (Controll::ToggleOtherAnimation, Setting::Toggle(true)),
-                (Controll::ToggleTouch, Setting::Toggle(true)),
-            ]),
-        }
+
+        Controller { toggles }
     }
 
-    fn get_key(&self, controll: &Controll) -> KeyCode {
-        match self.keymap.get(&controll) {
-            Some(key) => {
-                return key.to_owned();
-            }
-            None => todo!(),
+    pub fn enabled(&mut self, toggle: ToggleControll) -> bool {
+        let key_pressed = is_key_pressed(toggle.to_key());
+        let enabled = self.toggles.get(&toggle).unwrap();
+        if key_pressed {
+            let tmp = enabled.to_owned();
+            self.toggles.insert(toggle, !enabled.to_owned());
+            return !tmp;
+        } else {
+            return *enabled;
         }
     }
 
     pub fn is(&mut self, controll: Controll) -> bool {
-        match controll {
-            Controll::MoveUp
-            | Controll::MoveDown
-            | Controll::MoveLeft
-            | Controll::MoveRight
-            | Controll::Attack
-            | Controll::Roll
-            | Controll::Block
-            | Controll::ZoomIn
-            | Controll::ZoomOut
-            | Controll::MoveSecondaryUp
-            | Controll::MoveSecondaryDown
-            | Controll::MoveSecondaryLeft
-            | Controll::MoveSecondaryRight
-            | Controll::SecondaryAttack
-            | Controll::SecondaryRoll => is_key_down(self.get_key(&controll)),
-            Controll::ToggleCamera
-            | Controll::ToggleMaxZoom
-            | Controll::ToggleGeneration
-            | Controll::ToggleSecondaryPlayer
-            | Controll::ToggleOtherAnimation
-            | Controll::ToggleTouch => {
-                let key_pressed = is_key_pressed(self.get_key(&controll));
-                match self.settings.get(&controll) {
-                    Some(setting) => {
-                        match setting {
-                            Setting::Toggle(enabled) => {
-                                if key_pressed {
-                                    let tmp = enabled.to_owned();
-                                    self.settings.insert(
-                                        controll.to_owned(),
-                                        Setting::Toggle(!enabled.to_owned()),
-                                    );
-                                    return tmp;
-                                } else {
-                                    return *enabled;
-                                }
-                            }
-                        };
-                    }
-                    None => todo!(),
-                }
-            }
-        }
+        is_key_down(controll.to_key())
     }
 }

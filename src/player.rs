@@ -233,7 +233,7 @@ impl Player<'_> {
         self.cooldowns.remove(&from_action);
     }
 
-    pub fn render(&mut self, text_params: &TextParams) {
+    pub fn render(&mut self, text_params: &TextParams, debug: bool) {
         let interaction = match self.keyframe {
             KeyFrame::Blocking(_, action) => action.to_interaction(),
             KeyFrame::Free(_, interaction) => interaction,
@@ -268,6 +268,10 @@ impl Player<'_> {
             None => {
                 draw_circle(self.pos.x, self.pos.y, 1., RED);
             }
+        }
+        if debug {
+            draw_circle(self.pos.x, self.pos.y, 0.1, RED);
+            draw_circle_lines(self.pos.x,self.pos.y,2.5,0.1,RED);
         }
 
         draw_text_ex(&self.name, self.pos.x + 1., self.pos.y - 2., *text_params);
@@ -430,7 +434,6 @@ pub async fn load_textures() -> (Texture2D, HashMap<(Interaction, Direction), An
     texture.set_filter(FilterMode::Nearest);
     let spritesheet = load_string("textures/spritesheet.json").await.unwrap();
     let spritesheet: Spritesheet = serde_json::from_str(&spritesheet).unwrap();
-    println!("{:?}", spritesheet);
 
     for action in Interaction::iter() {
         match action {
@@ -486,9 +489,3 @@ pub async fn load_textures() -> (Texture2D, HashMap<(Interaction, Direction), An
 
    (texture, texture_map)
 }
-
-// pub async fn load_textures() -> HashMap<(Interaction, Direction), Animation> {
-//     let mut texture_map: HashMap<(Interaction, Direction), Animation> = HashMap::new();
-
-//     texture_map
-// }

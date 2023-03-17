@@ -58,7 +58,7 @@ impl MultiplayerHandler for DevLocalMultiplayer {
         
     }
 
-    fn upstream_event(&mut self, event: Event) {
+    fn upstream_event(&mut self, _event: Event) {
         
     }
 

@@ -1,4 +1,4 @@
-use crate::{multiplayer::Event, player::load_textures};
+use crate::{multiplayer::Event, player::load_textures, controlls::ToggleControll};
 use controlls::{Controll, Controller};
 use macroquad::prelude::*;
 use macroquad_virtual_joystick::{Joystick, JoystickDirection};
@@ -228,7 +228,7 @@ async fn main() {
 
         {
             //Player 2 controlls
-            if controller.is(Controll::ToggleSecondaryPlayer) {
+            if controller.enabled(ToggleControll::SecondaryPlayer) {
                 player2.update(&world::TileInteraction::Walkable, get_frame_time());
                 let speed = 20.;
                 let mut velocity = vec2(0., 0.);
@@ -287,7 +287,7 @@ async fn main() {
 
         //Set camera for world
 
-        if !controller.is(Controll::ToggleMaxZoom) && z < MAX_ZOOM {
+        if !controller.enabled(ToggleControll::FreeZoom) && z < MAX_ZOOM {
             z = MAX_ZOOM
         }
 
@@ -307,7 +307,7 @@ async fn main() {
         let corner = target - size / 2.;
         let view = Rect::new(corner.x, corner.y, size.x, size.y);
 
-        if controller.is(Controll::ToggleGeneration) {
+        if controller.enabled(ToggleControll::TerrainGeneration) {
             world.generate_at(view);
         }
 
@@ -320,19 +320,21 @@ async fn main() {
             ..Default::default()
         };
 
+        let debug_render = controller.enabled(ToggleControll::DebugHitbox);
+
         //render world within camera view
         world.render(view);
         //update player
         world.update_entity(&mut player, get_frame_time());
 
         for (_, other_player) in other_players.iter_mut() {
-            if controller.is(Controll::ToggleOtherAnimation) {
+            if controller.enabled(ToggleControll::OtherAnimations) {
                 world.update_entity(other_player, get_frame_time());
             }
-            other_player.render(&text_params);
+            other_player.render(&text_params, debug_render);
         }
 
-        player.render(&text_params);
+        player.render(&text_params,debug_render);
 
         // if z <= MAX_ZOOM {
         //     if(controller.is(Controll::ToggleDev)){
@@ -357,7 +359,7 @@ async fn main() {
         // draw_text("F to follow player", 30.0, 120.0, 30.0, BLACK);
         // draw_text("G to toggle generation", 30.0, 150.0, 30.0, BLACK);
         // draw_text("T to toggle touch controls", 30.0, 180.0, 30.0, BLACK);
-        if controller.is(Controll::ToggleTouch) {
+        if controller.enabled(ToggleControll::Touch) {
             player_joystick.render();
             camera_joytstick.render();
         }

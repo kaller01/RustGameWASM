@@ -158,6 +158,10 @@ impl Player<'_> {
         self.set_action(BlockingAction::Dying)
     }
 
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
     fn respawn(&mut self) {
         let spawn_points: Vec<Vec2> = vec![vec2(-40., -20.), vec2(5., -30.), vec2(-15., -10.)];
         let index = rand::gen_range(0, spawn_points.len());
@@ -209,7 +213,7 @@ impl Player<'_> {
         match self.keyframe {
             KeyFrame::Blocking(_, action) => match action {
                 BlockingAction::Attack => {
-                    self.cooldowns.insert(action, 0.3);
+                    self.cooldowns.insert(action, 1.);
                 }
                 BlockingAction::Roll => {
                     self.cooldowns.insert(action, 1.);

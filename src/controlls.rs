@@ -20,7 +20,6 @@ pub enum Controll {
     //Camera
     ZoomIn,
     ZoomOut,
-    ToggleCamera,
     //Player 2
     MoveSecondaryUp,
     MoveSecondaryDown,
@@ -39,6 +38,7 @@ pub enum ToggleControll {
     OtherAnimations,
     SecondaryPlayer,
     DebugHitbox,
+    Map
 }
 
 impl KeyMapped for Controll {
@@ -53,7 +53,6 @@ impl KeyMapped for Controll {
             Controll::Block => KeyCode::L,
             Controll::ZoomIn => KeyCode::E,
             Controll::ZoomOut => KeyCode::Q,
-            Controll::ToggleCamera => KeyCode::F,
             Controll::MoveSecondaryUp => KeyCode::Kp8,
             Controll::MoveSecondaryDown => KeyCode::Kp2,
             Controll::MoveSecondaryLeft => KeyCode::Kp4,
@@ -74,6 +73,7 @@ impl KeyMapped for ToggleControll {
             ToggleControll::OtherAnimations => KeyCode::O,
             ToggleControll::SecondaryPlayer => KeyCode::Kp5,
             ToggleControll::DebugHitbox => KeyCode::H,
+            ToggleControll::Map => KeyCode::M,
         }
     }
 }
@@ -88,6 +88,7 @@ impl ToggleControll {
             ToggleControll::OtherAnimations => true,
             ToggleControll::SecondaryPlayer => false,
             ToggleControll::DebugHitbox => false,
+            ToggleControll::Map => false,
         }
     }
 }

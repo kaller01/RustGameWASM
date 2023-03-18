@@ -143,6 +143,7 @@ pub struct Chunk {
 
 pub struct World {
     chunks: HashMap<ChunkPosition, Chunk>,
+    map_chunks: HashMap<ChunkPosition, MapChunk>,
     noise: Fbm<OpenSimplex>,
 }
 
@@ -160,16 +161,43 @@ impl World {
         let y2 = 10;
 
         let mut chunks: HashMap<ChunkPosition, Chunk> = HashMap::new();
+        let mut map_chunks: HashMap<ChunkPosition, MapChunk> = HashMap::new();
 
         for x in x1..x2 {
             for y in y1..y2 {
                 let pos = ChunkPosition { x, y };
                 let chunk = Chunk::generate(pos, &noise);
-                // let chunk = Chunk::default(pos);
                 chunks.insert(pos, chunk);
+                let map_chunk = MapChunk::generate(pos, &noise);
+                map_chunks.insert(pos, map_chunk);
             }
         }
-        return World { chunks, noise };
+        return World {
+            chunks,
+            noise,
+            map_chunks,
+        };
+    }
+
+    pub fn render_map(&mut self, view: Rect) {
+        for x in (view.x as i32)..(view.x+view.w) as i32 {
+            for y in (view.y as i32)..(view.y+view.h) as i32  {
+                let pos = ChunkPosition { x, y };
+                match (self.map_chunks.get(&pos), self.chunks.get(&pos)) {
+                    (None, _) => {
+                        draw_rectangle(
+                            pos.x as f32,
+                            pos.y as f32,
+                            1.,
+                            1.,
+                            color_u8!(100, 100, 100, 100),
+                        );
+                    }
+                    (Some(map), None) => map.render_small(false),
+                    (Some(map), Some(_)) => map.render_small(true),
+                }
+            }
+        }
     }
 
     pub fn render(&self, rect: Rect) {
@@ -180,13 +208,16 @@ impl World {
                 let pos = ChunkPosition { x, y };
                 match self.chunks.get(&pos) {
                     Some(chunk) => chunk.render(),
-                    None => Chunk::render_dead(pos),
+                    None => match self.map_chunks.get(&pos) {
+                        Some(chunk) => chunk.render(),
+                        None => (),
+                    },
                 }
             }
         }
     }
-    pub fn generate_at(&mut self, rect: Rect) {
-        let area = ChunkPosition::from_rect(rect);
+    pub fn generate_at(&mut self, render_zone: Rect, map_zone: Rect) {
+        let area = ChunkPosition::from_rect(render_zone);
         for x in area.0.x..area.1.x {
             for y in area.0.y..area.1.y {
                 let pos = ChunkPosition { x, y };
@@ -196,29 +227,21 @@ impl World {
                 }
             }
         }
+        self.generate_map_at(map_zone);
     }
-    // pub fn render_map(&self) {
-    //     let scale = 1;
-    //     for x in -100..100 {
-    //         for y in -100..100 {
-    //             let n = (self
-    //                 .noise
-    //                 .get_noise(((x * scale) as f32) / 300., ((y * scale) as f32) / 300.)
-    //                 + 1.)
-    //                 * 0.5;
-    //             let tile = Tile::generate(n);
-    //             let color = match tile.texture {
-    //                 TileTexture::Grass => GREEN,
-    //                 TileTexture::Water => BLUE,
-    //                 TileTexture::DeepWater => DARKBLUE,
-    //                 TileTexture::Mountain => GRAY,
-    //                 TileTexture::SnowyMountain => WHITE,
-    //                 TileTexture::Sand => YELLOW,
-    //             };
-    //             draw_rectangle(x as f32, y as f32, 1., 1., color);
-    //         }
-    //     }
-    // }
+
+    fn generate_map_at(&mut self, map_zone: Rect) {
+        let area = ChunkPosition::from_rect(map_zone);
+        for x in area.0.x..area.1.x {
+            for y in area.0.y..area.1.y {
+                let pos = ChunkPosition { x, y };
+                if !self.map_chunks.contains_key(&pos) {
+                    let chunk = MapChunk::generate(pos, &self.noise);
+                    self.map_chunks.insert(pos, chunk);
+                }
+            }
+        }
+    }
     // fn get_tile_mut(&mut self, coords: &Coords) -> Option<&mut Tile> {
     //     let chunk_pos = ChunkPosition::from_coords(coords);
     //     let index = (
@@ -291,6 +314,18 @@ impl World {
 }
 
 impl Chunk {
+    pub fn render_border(&self) {
+        let coords = Coords::from_position(&self.pos);
+        draw_rectangle_lines(
+            coords.x as f32,
+            coords.y as f32,
+            CHUNK_SIZE as f32,
+            CHUNK_SIZE as f32,
+            0.1,
+            RED,
+        );
+    }
+
     pub fn render(&self) {
         let coords = Coords::from_position(&self.pos);
 
@@ -301,22 +336,16 @@ impl Chunk {
                 draw_rectangle((coords.x + x) as f32, (coords.y + y) as f32, 1., 1., color);
             }
         }
-        // draw_rectangle_lines(
-        //     coords.x as f32,
-        //     coords.y as f32,
-        //     CHUNK_SIZE as f32,
-        //     CHUNK_SIZE as f32,
-        //     0.1,
-        //     RED,
-        // );
     }
+
+    pub fn render_lazy(&self) {}
+
     pub fn generate(chunk_pos: ChunkPosition, noise: &Fbm<OpenSimplex>) -> Chunk {
         let mut tiles: [[Tile; CHUNK_SIZE as usize]; CHUNK_SIZE as usize] = Default::default();
 
         for x in 0..CHUNK_SIZE {
             for y in 0..CHUNK_SIZE {
                 let pos = Coords::from_position_at(&chunk_pos, (x, y)).to_vec2();
-                // let n = (noise.get([pos.x / 300., pos.y / 300.]) + 1.) * 0.5;
                 let n = (noise.get([(pos.x) as f64, (pos.y) as f64]) + 1.) * 0.5;
                 tiles[x as usize][y as usize] = Tile::generate(n);
             }
@@ -327,20 +356,7 @@ impl Chunk {
             pos: chunk_pos,
         };
     }
-    pub fn default(chunk_pos: ChunkPosition) -> Chunk {
-        let mut tiles: [[Tile; CHUNK_SIZE as usize]; CHUNK_SIZE as usize] = Default::default();
 
-        for x in 0..CHUNK_SIZE {
-            for y in 0..CHUNK_SIZE {
-                tiles[x as usize][y as usize] = Tile::generate(0.5);
-            }
-        }
-
-        return Chunk {
-            tiles: tiles,
-            pos: chunk_pos,
-        };
-    }
     pub fn render_dead(pos: ChunkPosition) {
         let coords = Coords::from_position(&pos).to_vec2();
         draw_rectangle(
@@ -349,6 +365,62 @@ impl Chunk {
             CHUNK_SIZE as f32,
             CHUNK_SIZE as f32,
             RED,
+        );
+    }
+}
+
+struct MapChunk {
+    tile: Tile,
+    pos: ChunkPosition,
+}
+
+impl MapChunk {
+    pub fn generate(chunk_pos: ChunkPosition, noise: &Fbm<OpenSimplex>) -> MapChunk {
+        let pos = Coords::from_position_at(&chunk_pos, (0, 0)).to_vec2();
+        let n = (noise.get([(pos.x) as f64, (pos.y) as f64]) + 1.) * 0.5;
+        let tile = Tile::generate(n);
+        return MapChunk {
+            tile: tile,
+            pos: chunk_pos,
+        };
+    }
+
+    pub fn render_small(&self, discovered: bool) {
+        let color = self.tile.texture.to_color();
+        draw_rectangle(
+            self.pos.x as f32,
+            self.pos.y as f32,
+            1. as f32,
+            1. as f32,
+            color,
+        );
+        if !discovered {
+            draw_rectangle(
+                self.pos.x as f32,
+                self.pos.y as f32,
+                1.,
+                1.,
+                color_u8!(100, 100, 100, 100),
+            );
+        }
+    }
+
+    pub fn render(&self) {
+        let coords = Coords::from_position(&self.pos);
+        let color = self.tile.texture.to_color();
+        draw_rectangle(
+            (coords.x) as f32,
+            (coords.y) as f32,
+            CHUNK_SIZE as f32,
+            CHUNK_SIZE as f32,
+            color,
+        );
+        draw_rectangle(
+            (coords.x) as f32,
+            (coords.y) as f32,
+            CHUNK_SIZE as f32,
+            CHUNK_SIZE as f32,
+            color_u8!(100, 100, 100, 100),
         );
     }
 }

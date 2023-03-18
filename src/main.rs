@@ -201,11 +201,18 @@ async fn main() {
         //Controlls done, make view and render zones
         let z = world_camera.z;
         let target = match world_camera.mode {
-            CameraMode::PlayerLock => player.get_position(),
+            CameraMode::PlayerLock => {
+                if controller.is_enabled(ToggleControll::Touch) {
+                    let map_height = 1. / (z * (screen_width() / screen_height())) * 2.;
+                    player.get_position() + vec2(0., map_height * 0.15)
+                } else {
+                    player.get_position()
+                }
+            }
             CameraMode::Follow(target) => target,
         };
         let view_zone = make_view_rect(target, make_view_size(z));
-        let render_zone = make_view_rect(target, make_view_size(z).normalize() * 128.);
+        let render_zone = make_view_rect(player.get_position(), make_view_size(z).normalize() * 128.);
         let debug_render = controller.is_enabled(ToggleControll::DebugHitbox);
 
         //Update world
@@ -402,17 +409,19 @@ fn handle_player_input(
         &mut world_camera.mode,
         controller.is_enabled(ToggleControll::FreeCamera),
     ) {
-        (CameraMode::PlayerLock, true) => world_camera.mode = CameraMode::Follow(player.get_position()),
+        (CameraMode::PlayerLock, true) => {
+            world_camera.mode = CameraMode::Follow(player.get_position())
+        }
         (CameraMode::Follow(target), true) => {
-            let size = make_view_size(world_camera.z)*0.3;
+            let size = make_view_size(world_camera.z) * 0.3;
             let zone = make_view_rect(*target, size);
             if !zone.contains(player.get_position()) {
-                println!("Test: {}", (player.get_position() - *target)/size);
-                *target += (player.get_position() - *target)/size;
+                println!("Test: {}", (player.get_position() - *target) / size);
+                *target += (player.get_position() - *target) / size;
             }
-        },
+        }
         (CameraMode::Follow(_), false) => world_camera.mode = CameraMode::PlayerLock,
-        _ => ()
+        _ => (),
     };
 
     let speed = 15.;

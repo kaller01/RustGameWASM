@@ -39,8 +39,13 @@ const MAX_ZOOM: f32 = 0.005;
 const MIN_ZOOM: f32 = 0.1;
 
 struct WorldCamera {
-    target: Vec2,
+    mode: CameraMode,
     z: f32,
+}
+
+enum CameraMode {
+    PlayerLock,
+    Follow(Vec2),
 }
 
 struct TouchControll {
@@ -77,7 +82,7 @@ async fn main() {
 
     //Changable settings (camera, player etc)
     let mut world_camera = WorldCamera {
-        target: vec2(0., 0.),
+        mode: CameraMode::PlayerLock,
         z: 0.04,
     };
 
@@ -195,8 +200,12 @@ async fn main() {
 
         //Controlls done, make view and render zones
         let z = world_camera.z;
-        let view_zone = make_view_rect(world_camera.target, make_view_size(z));
-        let render_zone = make_view_rect(world_camera.target, make_view_size(z).normalize() * 128.);
+        let target = match world_camera.mode {
+            CameraMode::PlayerLock => player.get_position(),
+            CameraMode::Follow(target) => target,
+        };
+        let view_zone = make_view_rect(target, make_view_size(z));
+        let render_zone = make_view_rect(target, make_view_size(z).normalize() * 128.);
         let debug_render = controller.is_enabled(ToggleControll::DebugHitbox);
 
         //Update world
@@ -216,7 +225,7 @@ async fn main() {
         {
             let zoom = vec2(z, -z * (screen_width() / screen_height()));
             set_camera(&Camera2D {
-                target: world_camera.target,
+                target,
                 zoom: zoom,
                 ..Default::default()
             });
@@ -255,8 +264,13 @@ async fn main() {
         //Exprimental map
         if controller.is_enabled(ToggleControll::Map) {
             set_default_camera();
-            draw_rectangle(screen_width()*0.08, screen_height()*0.08, screen_width()*0.84, screen_height()*0.84, BROWN);
-
+            draw_rectangle(
+                screen_width() * 0.08,
+                screen_height() * 0.08,
+                screen_width() * 0.84,
+                screen_height() * 0.84,
+                BROWN,
+            );
 
             let z = 0.01;
             let zoom = vec2(z, -z * (screen_width() / screen_height()));
@@ -268,7 +282,7 @@ async fn main() {
                 target,
                 ..Default::default()
             });
-            let map_zone = make_view_rect(target, make_view_size(z)*0.8);
+            let map_zone = make_view_rect(target, make_view_size(z) * 0.8);
             world.generate_at(
                 Rect::new(0., 0., 0., 0.),
                 make_view_rect(target * 8., make_view_size(z) * 8.),
@@ -384,6 +398,23 @@ fn handle_player_input(
     touch: &mut TouchControll,
     multiplayer_handler: &mut Box<dyn MultiplayerHandler>,
 ) {
+    match (
+        &mut world_camera.mode,
+        controller.is_enabled(ToggleControll::FreeCamera),
+    ) {
+        (CameraMode::PlayerLock, true) => world_camera.mode = CameraMode::Follow(player.get_position()),
+        (CameraMode::Follow(target), true) => {
+            let size = make_view_size(world_camera.z)*0.3;
+            let zone = make_view_rect(*target, size);
+            if !zone.contains(player.get_position()) {
+                println!("Test: {}", (player.get_position() - *target)/size);
+                *target += (player.get_position() - *target)/size;
+            }
+        },
+        (CameraMode::Follow(_), false) => world_camera.mode = CameraMode::PlayerLock,
+        _ => ()
+    };
+
     let speed = 15.;
     let mut velocity = vec2(0., 0.);
     if controller.is(Controll::MoveRight) {
@@ -400,20 +431,9 @@ fn handle_player_input(
     }
     velocity = velocity.normalize_or_zero() * speed;
     player.set_velocity(velocity);
-    if controller.is_enabled(ToggleControll::Touch) {
-        let map_height = 1. / (world_camera.z * (screen_width() / screen_height())) * 2.;
-        world_camera.target = player.get_position() + vec2(0., map_height * 0.15);
-    } else {
-        world_camera.target = player.get_position();
-    }
 
     //Joystick
-    let joystick_event = touch.joystick.update();
-    if joystick_event.direction != JoystickDirection::Idle {
-        player.set_velocity(
-            joystick_event.direction.to_local().normalize() * joystick_event.intensity * speed,
-        );
-    }
+
     if controller.is(Controll::ZoomIn) {
         world_camera.z *= 1.1;
     }
@@ -423,11 +443,26 @@ fn handle_player_input(
 
     let mut action = None;
 
-    if touch.zoom_in.down() {
-        world_camera.z *= 1.03;
-    }
-    if touch.zoom_out.down() {
-        world_camera.z *= 0.97;
+    if controller.is_enabled(ToggleControll::Touch) {
+        let joystick_event = touch.joystick.update();
+        if joystick_event.direction != JoystickDirection::Idle {
+            player.set_velocity(
+                joystick_event.direction.to_local().normalize() * joystick_event.intensity * speed,
+            );
+        }
+
+        if touch.zoom_in.down() {
+            world_camera.z *= 1.03;
+        }
+        if touch.zoom_out.down() {
+            world_camera.z *= 0.97;
+        }
+        if touch.attack.down() {
+            action = Some(player::BlockingAction::Attack)
+        }
+        if touch.roll.down() {
+            action = Some(player::BlockingAction::Roll)
+        }
     }
 
     if controller.is(Controll::Attack) {
@@ -438,12 +473,6 @@ fn handle_player_input(
     }
     if controller.is(Controll::Block) {
         action = Some(player::BlockingAction::Block)
-    }
-    if touch.attack.down() {
-        action = Some(player::BlockingAction::Attack)
-    }
-    if touch.attack.down() {
-        action = Some(player::BlockingAction::Roll)
     }
 
     match action {

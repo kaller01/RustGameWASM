@@ -111,13 +111,13 @@ impl Default for Tile {
 
 impl Tile {
     fn generate(n: f64) -> Tile {
-        let (texture, interaction) = if n < 0.2 {
+        let (texture, interaction) = if n < 0.25 {
             (TileTexture::DeepWater, TileInteraction::Block)
-        } else if n < 0.35 {
+        } else if n < 0.43 {
             (TileTexture::Water, TileInteraction::Swimmable)
-        } else if n < 0.4 {
+        } else if n < 0.5 {
             (TileTexture::ShallowWater, TileInteraction::Crawl)
-        } else if n < 0.42 {
+        } else if n < 0.52 {
             (TileTexture::Sand, TileInteraction::Walkable)
         } else if n < 0.65 {
             (TileTexture::Grass, TileInteraction::Walkable)

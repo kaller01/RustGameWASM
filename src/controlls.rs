@@ -20,6 +20,7 @@ pub enum Controll {
     //Camera
     ZoomIn,
     ZoomOut,
+    ForceRender,
     //Player 2
     MoveSecondaryUp,
     MoveSecondaryDown,
@@ -48,11 +49,12 @@ impl KeyMapped for Controll {
             Controll::MoveDown => KeyCode::S,
             Controll::MoveLeft => KeyCode::A,
             Controll::MoveRight => KeyCode::D,
-            Controll::Attack => KeyCode::J,
-            Controll::Roll => KeyCode::K,
+            Controll::Attack => KeyCode::Space,
+            Controll::Roll => KeyCode::LeftShift,
             Controll::Block => KeyCode::L,
             Controll::ZoomIn => KeyCode::E,
             Controll::ZoomOut => KeyCode::Q,
+            Controll::ForceRender => KeyCode::R,
             Controll::MoveSecondaryUp => KeyCode::Kp8,
             Controll::MoveSecondaryDown => KeyCode::Kp2,
             Controll::MoveSecondaryLeft => KeyCode::Kp4,

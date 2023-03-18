@@ -37,6 +37,7 @@ fn get_multiplayer_handler() -> Box<dyn MultiplayerHandler> {
 
 const MAX_ZOOM: f32 = 0.005;
 const MIN_ZOOM: f32 = 0.1;
+const MAX_RENDER: f32 = 256.;
 
 struct WorldCamera {
     mode: CameraMode,
@@ -212,13 +213,17 @@ async fn main() {
             CameraMode::Follow(target) => target,
         };
         let view_zone = make_view_rect(target, make_view_size(z));
-        let render_zone = make_view_rect(player.get_position(), make_view_size(z).normalize() * 128.);
+        let render_zone = make_view_rect(player.get_position(), make_view_size(z).normalize() * MAX_RENDER);
         let debug_render = controller.is_enabled(ToggleControll::DebugHitbox);
 
         //Update world
         {
             if controller.is_enabled(ToggleControll::TerrainGeneration) {
-                world.generate_at(render_zone, view_zone);
+                if controller.is(Controll::ForceRender){
+                    world.generate_at(view_zone, view_zone);
+                } else {
+                    world.generate_at(render_zone, view_zone);
+                }
             }
             world.update_entity(&mut player, get_frame_time());
             for (_, other_player) in other_players.iter_mut() {
@@ -279,7 +284,7 @@ async fn main() {
                 BROWN,
             );
 
-            let z = 0.01;
+            let z = 0.008;
             let zoom = vec2(z, -z * (screen_width() / screen_height()));
 
             let target = player.get_position() / 8.;
@@ -333,6 +338,9 @@ async fn main() {
             set_default_camera();
             draw_text("WASD to move player", 10.0, 30.0, 30.0, BLACK);
             draw_text("Q-E to zoom camera", 10.0, 60.0, 30.0, BLACK);
+            draw_text("LeftShift to roll", 10.0, 90.0, 30.0, BLACK);
+            draw_text("Space to swing sword", 10.0, 120.0, 30.0, BLACK);
+            draw_text("M to open map", 10.0, 150.0, 30.0, BLACK);
             draw_text(
                 &format!(
                     "{:.0}, {:.0}",

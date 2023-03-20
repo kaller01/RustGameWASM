@@ -1,4 +1,4 @@
-use crate::player::Entity;
+use crate::player::{Direction, Entity};
 use macroquad::prelude::*;
 use noise::{Fbm, MultiFractal, NoiseFn, OpenSimplex};
 use std::collections::HashMap;
@@ -68,6 +68,13 @@ pub enum TileInteraction {
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
+pub enum TileAction {
+    None,
+    Destroyable,
+    Death,
+}
+
+#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 pub enum TileTexture {
     Grass,
     Water,
@@ -75,7 +82,7 @@ pub enum TileTexture {
     Sand,
     DeepWater,
     Dirt,
-    Mountain,
+    Stone,
     SnowyMountain,
 }
 
@@ -86,7 +93,7 @@ impl TileTexture {
             TileTexture::ShallowWater => SKYBLUE,
             TileTexture::Water => BLUE,
             TileTexture::DeepWater => DARKBLUE,
-            TileTexture::Mountain => GRAY,
+            TileTexture::Stone => GRAY,
             TileTexture::SnowyMountain => WHITE,
             TileTexture::Sand => YELLOW,
             TileTexture::Dirt => Color::from_rgba(155, 118, 83, 255),
@@ -98,6 +105,7 @@ impl TileTexture {
 pub struct Tile {
     texture: TileTexture,
     interaction: TileInteraction,
+    action: TileAction,
 }
 
 impl Default for Tile {
@@ -105,32 +113,62 @@ impl Default for Tile {
         Tile {
             texture: TileTexture::Grass,
             interaction: TileInteraction::Walkable,
+            action: TileAction::None,
         }
     }
 }
 
 impl Tile {
     fn generate(n: f64) -> Tile {
-        let (texture, interaction) = if n < 0.25 {
-            (TileTexture::DeepWater, TileInteraction::Block)
+        let (texture, interaction, action) = if n < 0.25 {
+            (
+                TileTexture::DeepWater,
+                TileInteraction::Walkable,
+                TileAction::Death,
+            )
         } else if n < 0.43 {
-            (TileTexture::Water, TileInteraction::Swimmable)
+            (
+                TileTexture::Water,
+                TileInteraction::Swimmable,
+                TileAction::None,
+            )
         } else if n < 0.5 {
-            (TileTexture::ShallowWater, TileInteraction::Crawl)
+            (
+                TileTexture::ShallowWater,
+                TileInteraction::Crawl,
+                TileAction::None,
+            )
         } else if n < 0.52 {
-            (TileTexture::Sand, TileInteraction::Walkable)
-        } else if n < 0.65 {
-            (TileTexture::Grass, TileInteraction::Walkable)
-        } else if n < 0.69 {
-            (TileTexture::Dirt, TileInteraction::Block)
-        } else if n < 0.8 {
-            (TileTexture::Mountain, TileInteraction::Block)
+            (
+                TileTexture::Sand,
+                TileInteraction::Walkable,
+                TileAction::None,
+            )
+        } else if n < 0.7 {
+            (
+                TileTexture::Grass,
+                TileInteraction::Walkable,
+                TileAction::None,
+            )
+        } else if n < 0.72 {
+            (
+                TileTexture::Dirt,
+                TileInteraction::Block,
+                TileAction::Destroyable,
+            )
+        } else if n < 0.85 {
+            (TileTexture::Stone, TileInteraction::Block, TileAction::Death)
         } else {
-            (TileTexture::SnowyMountain, TileInteraction::Block)
+            (
+                TileTexture::SnowyMountain,
+                TileInteraction::Block,
+                TileAction::Death,
+            )
         };
         Tile {
             texture,
             interaction,
+            action,
         }
     }
 }
@@ -180,8 +218,8 @@ impl World {
     }
 
     pub fn render_map(&mut self, view: Rect) {
-        for x in (view.x as i32)..(view.x+view.w) as i32 {
-            for y in (view.y as i32)..(view.y+view.h) as i32  {
+        for x in (view.x as i32)..(view.x + view.w) as i32 {
+            for y in (view.y as i32)..(view.y + view.h) as i32 {
                 let pos = ChunkPosition { x, y };
                 match (self.map_chunks.get(&pos), self.chunks.get(&pos)) {
                     (None, _) => {
@@ -264,6 +302,21 @@ impl World {
             None => None,
         }
     }
+
+    fn set_tile(&mut self, coords: &Coords, tile: Tile) {
+        let chunk_pos = ChunkPosition::from_coords(coords);
+        let index = (
+            (coords.x.rem_euclid(CHUNK_SIZE) as usize),
+            (coords.y.rem_euclid(CHUNK_SIZE) as usize),
+        );
+        match self.chunks.get_mut(&chunk_pos) {
+            Some(chunk) => {
+                chunk.tiles[index.0][index.1] = tile;
+            }
+            None => (),
+        }
+    }
+
     pub fn update_entity(&self, entity: &mut dyn Entity, time: f32) {
         let current_coords = Coords::from_vec2(entity.get_position());
         let mut velocity = entity.get_velocity();
@@ -271,10 +324,9 @@ impl World {
         match self.get_tile(&current_coords) {
             Some(tile) => {
                 match tile.interaction {
-                    TileInteraction::Block => (),
-                    TileInteraction::Walkable => (),
-                    TileInteraction::Swimmable => velocity *= 0.3,
-                    TileInteraction::Crawl => velocity *= 0.5,
+                    TileInteraction::Swimmable => velocity *= 0.6,
+                    TileInteraction::Crawl => velocity *= 0.4,
+                    _ => (),
                 }
 
                 let new_pos = entity.get_position() + velocity * time;
@@ -293,10 +345,38 @@ impl World {
                     }
                 }
 
-                entity.update(&tile.interaction, time);
+                entity.update(&tile.interaction, &tile.action, time);
             }
             None => (),
         };
+    }
+
+    pub fn update_world_by_entity(&mut self, entity: &mut dyn Entity) {
+        let world_event = entity.get_world_event();
+        match world_event {
+            crate::player::WorldEvent::Destroy(direction) => {
+                let current_coords = Coords::from_vec2(entity.get_position());
+
+                let tiles_coords = get_tiles_in_half_circle(current_coords, direction, 3.);
+                for tile_coords in tiles_coords {
+                    match self.get_tile(&tile_coords) {
+                        Some(tile) => match tile.action {
+                            TileAction::Destroyable => self.set_tile(
+                                &tile_coords,
+                                Tile {
+                                    texture: TileTexture::Grass,
+                                    interaction: TileInteraction::Walkable,
+                                    action: TileAction::None,
+                                },
+                            ),
+                            _ => (),
+                        },
+                        None => (),
+                    }
+                }
+            }
+            _ => (),
+        }
     }
 
     fn can_move_entity_to_tile(&self, new_pos: Vec2) -> bool {
@@ -423,4 +503,38 @@ impl MapChunk {
             color_u8!(100, 100, 100, 100),
         );
     }
+}
+
+pub fn get_tiles_in_half_circle(center: Coords, direction: Direction, radius: f32) -> Vec<Coords> {
+    let mut tiles = Vec::new();
+
+    let facing_vec = direction.to_vec2();
+    let facing_angle = facing_vec.y.atan2(facing_vec.x);
+    let half_circle_angle = std::f32::consts::PI / 2.0;
+
+    for x in (center.x - radius as i32)..=(center.x + radius as i32) {
+        for y in (center.y - radius as i32)..=(center.y + radius as i32) {
+            let tile_coords = Coords { x, y };
+
+            // Check if tile is within radius
+            let distance_squared =
+                (tile_coords.x - center.x).pow(2) + (tile_coords.y - center.y).pow(2);
+            let radius_squared = radius.powf(2.);
+            if distance_squared as f32 <= radius_squared {
+                // Check if tile is within half circle facing in player direction
+                let tile_vec = Vec2 {
+                    x: (tile_coords.x - center.x) as f32,
+                    y: (tile_coords.y - center.y) as f32,
+                };
+                let tile_angle = tile_vec.y.atan2(tile_vec.x);
+                let angle_diff = (tile_angle - facing_angle).abs();
+                let within_half_circle = angle_diff <= half_circle_angle;
+                if within_half_circle {
+                    tiles.push(tile_coords);
+                }
+            }
+        }
+    }
+
+    tiles
 }

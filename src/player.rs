@@ -1,16 +1,22 @@
-use crate::world::TileInteraction;
+use crate::world::{TileInteraction, TileAction};
 use macroquad::prelude::*;
 use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt, hash::Hash};
 use strum::IntoEnumIterator; // 0.17.1
 use strum_macros::EnumIter; // 0.17.1
 
+pub enum WorldEvent {
+    Destroy(Direction),
+    None,
+}
+
 pub trait Entity {
     fn get_velocity(&self) -> Vec2;
     fn get_position(&self) -> Vec2;
     fn set_position(&mut self, pos: Vec2);
+    fn get_world_event(&mut self) -> WorldEvent;
     //Should not handle positional changes
-    fn update(&mut self, tile: &TileInteraction, time: f32);
+    fn update(&mut self, tile_interaction: &TileInteraction, tile_action: &TileAction, time: f32);
 }
 
 pub struct Player<'a> {
@@ -24,6 +30,7 @@ pub struct Player<'a> {
     direction: Direction,
     // keyframe_interaction: Interaction,
     cooldowns: HashMap<BlockingAction, f32>,
+    world_events: Vec<WorldEvent>
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, EnumIter)]
@@ -65,7 +72,7 @@ pub enum Interaction {
 }
 
 impl Direction {
-    fn from_vec2(vec: Vec2) -> Option<Direction> {
+    pub fn from_vec2(vec: Vec2) -> Option<Direction> {
         if vec.x > 0. && vec.y == 0. {
             Some(Direction::Right)
         } else if vec.x < 0. && vec.y == 0. {
@@ -82,7 +89,7 @@ impl Direction {
             None
         }
     }
-    fn to_vec2(&self) -> Vec2 {
+    pub fn to_vec2(&self) -> Vec2 {
         match self {
             Direction::Up => vec2(0., -1.),
             Direction::Down => vec2(0., 1.),
@@ -115,6 +122,7 @@ impl Player<'_> {
             keyframe_timer: 0.,
             direction: Direction::Right,
             cooldowns: HashMap::new(),
+            world_events: Vec::new()
         }
     }
 
@@ -137,6 +145,7 @@ impl Player<'_> {
             keyframe_timer: 0.,
             direction: Direction::Right,
             cooldowns: HashMap::new(),
+            world_events: Vec::new()
         }
     }
 
@@ -148,6 +157,13 @@ impl Player<'_> {
 
         self.set_velocity(velocity);
         self.keyframe = KeyFrame::Blocking(0, action);
+
+        match action {
+            BlockingAction::Attack => {
+                self.world_events.push(WorldEvent::Destroy(self.get_direction()))
+            },
+            _ => ()
+        }
     }
 
     pub fn get_direction(&self) -> Direction {
@@ -162,10 +178,10 @@ impl Player<'_> {
         &self.name
     }
 
-    fn respawn(&mut self) {
-        let spawn_points: Vec<Vec2> = vec![vec2(-40., -20.), vec2(5., -30.), vec2(-15., -10.)];
-        let index = rand::gen_range(0, spawn_points.len());
-        self.pos = *spawn_points.get(index).unwrap();
+    pub fn respawn(&mut self) {
+        let size = 50;
+        let (x,y) = (rand::gen_range(-size, size),rand::gen_range(-size, size));
+        self.pos = vec2(x as f32, y as f32);
     }
 
     //used for multiplayer
@@ -301,7 +317,7 @@ impl Entity for Player<'_> {
         self.pos = pos;
     }
 
-    fn update(&mut self, tile_interaction: &TileInteraction, time: f32) {
+    fn update(&mut self, tile_interaction: &TileInteraction, tile_action: &TileAction, time: f32) {
         let next_possible_interaction = match tile_interaction {
             TileInteraction::Block => Interaction::Idle,
             TileInteraction::Walkable => Interaction::Walk,
@@ -309,12 +325,22 @@ impl Entity for Player<'_> {
             TileInteraction::Crawl => Interaction::Walk,
         };
 
+        match (self.keyframe, tile_action) {
+            (KeyFrame::Free(_, _), TileAction::Death) => self.kill(),
+            _ => ()
+        }
+
         let interaction = match self.keyframe {
             KeyFrame::Blocking(_, action) => action.to_interaction(),
             KeyFrame::Free(_, interaction) => interaction,
         };
 
         {
+            let time = match (interaction, tile_interaction) {
+                (Interaction::Walk, TileInteraction::Crawl) => time*0.4,
+                _ => time
+            };
+
             //Keyframe timer
             match self.animations.get(&(interaction, self.direction)) {
                 Some(texture_data) => {
@@ -377,6 +403,13 @@ impl Entity for Player<'_> {
         }
         for to_be_removed in to_be_removed {
             self.reset_cooldown(to_be_removed);
+        }
+    }
+
+    fn get_world_event(&mut self) -> WorldEvent {
+        match self.world_events.pop() {
+            Some(event) => event,
+            None => WorldEvent::None,
         }
     }
 }
@@ -471,7 +504,7 @@ pub async fn load_textures() -> (Texture2D, HashMap<(Interaction, Direction), An
 
                     let time_step = match action {
                         Interaction::Swim => 0.15,
-                        Interaction::Walk => 0.3,
+                        Interaction::Walk => 0.15,
                         Interaction::Idle => 0.5,
                         Interaction::Attack => 0.08,
                         Interaction::Roll => 0.2,

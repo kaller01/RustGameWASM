@@ -97,6 +97,7 @@ async fn main() {
     let (textures, texture_map) = load_textures().await;
 
     let mut player = Player::new_playable(-3., -10., &texture_map, &textures);
+    player.respawn();
 
     let mut player2 = Player::new_other(
         String::from("Player2"),
@@ -224,11 +225,15 @@ async fn main() {
                 } else {
                     world.generate_at(render_zone, view_zone);
                 }
+            
             }
             world.update_entity(&mut player, get_frame_time());
+            world.update_world_by_entity(&mut player);
+
             for (_, other_player) in other_players.iter_mut() {
                 if controller.is_enabled(ToggleControll::OtherAnimations) {
                     world.update_entity(other_player, get_frame_time());
+                    world.update_world_by_entity(other_player);
                 }
             }
         }
@@ -513,7 +518,7 @@ fn handle_debug_player(
     multiplayer_handler: &mut Box<dyn MultiplayerHandler>,
 ) {
     if controller.is_enabled(ToggleControll::SecondaryPlayer) {
-        player2.update(&world::TileInteraction::Walkable, get_frame_time());
+        player2.update(&world::TileInteraction::Walkable, &world::TileAction::None, get_frame_time());
         let speed = 20.;
         let mut velocity = vec2(0., 0.);
         if controller.is(Controll::MoveSecondaryRight) {

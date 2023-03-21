@@ -4,7 +4,7 @@ use macroquad::prelude::*;
 
 use crate::world::{entity::*, tile::*};
 
-use super::{Player, animation::*, ATTACK_COOLDOWN, BlockingAction, Interaction};
+use super::{animation::*, BlockingAction, Interaction, Player, ATTACK_COOLDOWN};
 
 impl BlockingAction {
     pub fn to_interaction(&self) -> Interaction {
@@ -64,6 +64,7 @@ impl Player<'_> {
             cooldowns: HashMap::new(),
             world_events: Vec::new(),
             local_player: true,
+            resources: HashMap::new(),
         }
     }
 
@@ -87,7 +88,8 @@ impl Player<'_> {
             direction: Direction::Right,
             cooldowns: HashMap::new(),
             world_events: Vec::new(),
-            local_player: false
+            local_player: false,
+            resources: HashMap::new(),
         }
     }
 
@@ -179,8 +181,8 @@ impl Player<'_> {
                 BlockingAction::Dying => {
                     if self.local_player {
                         self.respawn()
-                    }                    
-                },
+                    }
+                }
                 _ => (),
             },
             KeyFrame::Free(_, _) => {}
@@ -207,8 +209,6 @@ impl Player<'_> {
 
         let x = self.pos.x;
         let y = self.pos.y;
-
-       
 
         match self.animations.get(&(interaction, self.direction)) {
             Some(texture_data) => {
@@ -241,9 +241,15 @@ impl Player<'_> {
 
         match self.cooldowns.get(&BlockingAction::Attack) {
             Some(time) => {
-                let cooldown = (ATTACK_COOLDOWN-time)/ATTACK_COOLDOWN;
-                draw_rectangle(x-2., y+2., 4.*cooldown, 0.5, color_u8!(255,124,0,200));
-            },
+                let cooldown = (ATTACK_COOLDOWN - time) / ATTACK_COOLDOWN;
+                draw_rectangle(
+                    x - 2.,
+                    y + 2.,
+                    4. * cooldown,
+                    0.5,
+                    color_u8!(255, 124, 0, 200),
+                );
+            }
             None => (),
         };
         if debug {
@@ -259,9 +265,19 @@ impl Player<'_> {
             KeyFrame::Free(_, _) => self.v = velocity,
         }
     }
+
+    pub fn try_place(&mut self, pos: Vec2) {
+        match self.resources.get_mut(&WorldResource::Dirt) {
+            Some(amount) => {
+                if *amount > 0 {
+                    *amount -= 1;
+                    self.world_events.push(EntityWorldEvent::Place(WorldResource::Dirt,pos));
+                }
+            }
+            None => (),
+        }
+    }
 }
-
-
 
 impl WorldEntity for Player<'_> {
     fn get_velocity(&self) -> Vec2 {
@@ -376,5 +392,17 @@ impl WorldEntity for Player<'_> {
             Some(event) => event,
             None => EntityWorldEvent::None,
         }
+    }
+
+    fn give_resource(&mut self, resource: WorldResource) {
+        match self.resources.get_mut(&resource) {
+            Some(amount) => {
+                *amount += 1;
+            }
+            None => {
+                self.resources.insert(resource, 1);
+            }
+        }
+        debug!("Wow!")
     }
 }

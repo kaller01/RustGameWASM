@@ -3,8 +3,8 @@ use controlls::{Controll, Controller};
 use macroquad::prelude::*;
 use macroquad_virtual_joystick::{Joystick, JoystickDirection};
 use multiplayer::MultiplayerHandler;
-use player::{Player, animation::load_textures};
-use world::{*, entity::*, tile::*};
+use player::{animation::load_textures, Player};
+use world::{entity::*, tile::*, *};
 // use quad_url::*;
 use std::collections::HashMap;
 use touchbutton::Button;
@@ -213,18 +213,20 @@ async fn main() {
             CameraMode::Follow(target) => target,
         };
         let view_zone = make_view_rect(target, make_view_size(z));
-        let render_zone = make_view_rect(player.get_position(), make_view_size(z).normalize() * MAX_RENDER);
+        let render_zone = make_view_rect(
+            player.get_position(),
+            make_view_size(z).normalize() * MAX_RENDER,
+        );
         let debug_render = controller.is_enabled(ToggleControll::DebugHitbox);
 
         //Update world
         {
             if controller.is_enabled(ToggleControll::TerrainGeneration) {
-                if controller.is(Controll::ForceRender){
+                if controller.is(Controll::ForceRender) {
                     world.generate_at(view_zone, view_zone);
                 } else {
                     world.generate_at(render_zone, view_zone);
                 }
-            
             }
             world.update_entity(&mut player, get_frame_time());
             world.update_world_by_entity(&mut player);
@@ -255,6 +257,19 @@ async fn main() {
             };
 
             world.render(view_zone);
+
+            let (mouse_x, mouse_y) = mouse_position();
+            let pos = ((vec2(mouse_x, mouse_y) - vec2(screen_width(), screen_height()) / 2.)
+                / vec2(screen_width(), screen_height())
+                * (make_view_size(z))
+                + target).round();
+            if target.distance_squared(pos) < 16.*16. {
+                draw_rectangle(pos.x, pos.y, 1., 1., BLACK);
+                if is_mouse_button_down(MouseButton::Left) {
+                    player.try_place(pos);
+                }
+            }
+            
 
             for (_, other_player) in other_players.iter_mut() {
                 if controller.is_enabled(ToggleControll::OtherAnimations) {
@@ -517,7 +532,11 @@ fn handle_debug_player(
     multiplayer_handler: &mut Box<dyn MultiplayerHandler>,
 ) {
     if controller.is_enabled(ToggleControll::SecondaryPlayer) {
-        player2.update(&TileInteraction::Walkable, &TileAction::None, get_frame_time());
+        player2.update(
+            &TileInteraction::Walkable,
+            &TileAction::None,
+            get_frame_time(),
+        );
         let speed = 20.;
         let mut velocity = vec2(0., 0.);
         if controller.is(Controll::MoveSecondaryRight) {

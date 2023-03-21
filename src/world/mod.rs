@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
 use macroquad::prelude::*;
-use noise::{OpenSimplex, Fbm, MultiFractal};
+use noise::{Fbm, MultiFractal, OpenSimplex};
 
-use self::{positions::*, chunk::*, tile::*, entity::*};
+use self::{chunk::*, entity::*, positions::*, tile::*};
 
 pub mod chunk;
-pub mod tile;
-pub mod positions;
 pub mod entity;
+pub mod positions;
+pub mod tile;
 
 const CHUNK_SIZE: i32 = 8;
 
@@ -113,17 +113,17 @@ impl World {
             }
         }
     }
-    // fn get_tile_mut(&mut self, coords: &Coords) -> Option<&mut Tile> {
-    //     let chunk_pos = ChunkPosition::from_coords(coords);
-    //     let index = (
-    //         (coords.x.rem_euclid(CHUNK_SIZE) as usize),
-    //         (coords.y.rem_euclid(CHUNK_SIZE) as usize),
-    //     );
-    //     match self.chunks.get_mut(&chunk_pos) {
-    //         Some(chunk) => Some(&mut chunk.tiles[index.0][index.1]),
-    //         None => None,
-    //     }
-    // }
+    fn get_tile_mut(&mut self, coords: &Coords) -> Option<&mut Tile> {
+        let chunk_pos = ChunkPosition::from_coords(coords);
+        let index = (
+            (coords.x.rem_euclid(CHUNK_SIZE) as usize),
+            (coords.y.rem_euclid(CHUNK_SIZE) as usize),
+        );
+        match self.chunks.get_mut(&chunk_pos) {
+            Some(chunk) => Some(&mut chunk.tiles[index.0][index.1]),
+            None => None,
+        }
+    }
     fn get_tile(&self, coords: &Coords) -> Option<&Tile> {
         let chunk_pos = ChunkPosition::from_coords(coords);
         let index = (
@@ -194,21 +194,38 @@ impl World {
                 for tile_coords in tiles_coords {
                     match self.get_tile(&tile_coords) {
                         Some(tile) => match tile.action {
-                            TileAction::Destroyable => self.set_tile(
-                                &tile_coords,
-                                Tile {
-                                    texture: TileTexture::Grass,
-                                    interaction: TileInteraction::Walkable,
-                                    action: TileAction::None,
-                                },
-                            ),
+                            TileAction::Destroyable => {
+                                entity.give_resource(WorldResource::Dirt);
+                                self.set_tile(
+                                    &tile_coords,
+                                    Tile {
+                                        texture: TileTexture::Grass,
+                                        interaction: TileInteraction::Walkable,
+                                        action: TileAction::None,
+                                    },
+                                );
+                            }
                             _ => (),
                         },
                         None => (),
                     }
                 }
             }
-            _ => (),
+            EntityWorldEvent::Place(resource, pos) => {
+                let place_coords = Coords::from_vec2(pos);
+                match self.get_tile_mut(&place_coords) {
+                    Some(tile) => {
+                        match tile.interaction {
+                            TileInteraction::Walkable | TileInteraction::Crawl => {
+                                *tile = resource.to_tile();
+                            }
+                            _ => ()
+                        }
+                    },
+                    None => (),
+                }
+            },
+            EntityWorldEvent::None => ()
         }
     }
 

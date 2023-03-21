@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use macroquad::prelude::*;
 use strum_macros::EnumIter;
 
-use crate::world::entity::{Direction, EntityWorldEvent};
+use crate::world::entity::{Direction, EntityWorldEvent, WorldResource};
 
 use self::{animation::*};
 
@@ -23,7 +23,8 @@ pub struct Player<'a> {
     direction: Direction,
     cooldowns: HashMap<BlockingAction, f32>,
     world_events: Vec<EntityWorldEvent>,
-    local_player: bool
+    local_player: bool,
+    resources: HashMap<WorldResource, u32>
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, EnumIter)]

@@ -12,7 +12,7 @@ impl Tile {
         let (texture, interaction, action) = if n < 0.25 {
             (
                 TileTexture::DeepWater,
-                TileInteraction::Walkable,
+                TileInteraction::Swimmable,
                 TileAction::Death,
             )
         } else if n < 0.43 {

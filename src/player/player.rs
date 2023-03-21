@@ -1,53 +1,10 @@
-use crate::world::{TileInteraction, TileAction};
+use std::collections::HashMap;
+
 use macroquad::prelude::*;
-use serde_derive::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt, hash::Hash};
-use strum::IntoEnumIterator; // 0.17.1
-use strum_macros::EnumIter; // 0.17.1
 
-pub enum WorldEvent {
-    Destroy(Direction),
-    None,
-}
+use crate::world::{entity::*, tile::*};
 
-pub trait Entity {
-    fn get_velocity(&self) -> Vec2;
-    fn get_position(&self) -> Vec2;
-    fn set_position(&mut self, pos: Vec2);
-    fn get_world_event(&mut self) -> WorldEvent;
-    //Should not handle positional changes
-    fn update(&mut self, tile_interaction: &TileInteraction, tile_action: &TileAction, time: f32);
-}
-
-pub struct Player<'a> {
-    name: String,
-    pos: Vec2,
-    v: Vec2,
-    animations: &'a HashMap<(Interaction, Direction), Animation>,
-    textures: &'a Texture2D,
-    keyframe: KeyFrame,
-    keyframe_timer: f32,
-    direction: Direction,
-    // keyframe_interaction: Interaction,
-    cooldowns: HashMap<BlockingAction, f32>,
-    world_events: Vec<WorldEvent>
-}
-
-#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, EnumIter)]
-pub enum Direction {
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
-#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, EnumIter)]
-pub enum BlockingAction {
-    Attack,
-    Roll,
-    Block,
-    Dying,
-}
+use super::{Player, animation::*, ATTACK_COOLDOWN, BlockingAction, Interaction};
 
 impl BlockingAction {
     pub fn to_interaction(&self) -> Interaction {
@@ -58,17 +15,6 @@ impl BlockingAction {
             BlockingAction::Dying => Interaction::Dying,
         }
     }
-}
-
-#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, EnumIter)]
-pub enum Interaction {
-    Swim,
-    Walk,
-    Idle,
-    Attack,
-    Roll,
-    Block,
-    Dying,
 }
 
 impl Direction {
@@ -99,12 +45,6 @@ impl Direction {
     }
 }
 
-#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
-enum KeyFrame {
-    Blocking(u8, BlockingAction),
-    Free(u8, Interaction),
-}
-
 impl Player<'_> {
     pub fn new_playable<'a>(
         x: f32,
@@ -122,7 +62,8 @@ impl Player<'_> {
             keyframe_timer: 0.,
             direction: Direction::Right,
             cooldowns: HashMap::new(),
-            world_events: Vec::new()
+            world_events: Vec::new(),
+            local_player: true,
         }
     }
 
@@ -145,7 +86,8 @@ impl Player<'_> {
             keyframe_timer: 0.,
             direction: Direction::Right,
             cooldowns: HashMap::new(),
-            world_events: Vec::new()
+            world_events: Vec::new(),
+            local_player: false
         }
     }
 
@@ -159,10 +101,10 @@ impl Player<'_> {
         self.keyframe = KeyFrame::Blocking(0, action);
 
         match action {
-            BlockingAction::Attack => {
-                self.world_events.push(WorldEvent::Destroy(self.get_direction()))
-            },
-            _ => ()
+            BlockingAction::Attack => self
+                .world_events
+                .push(EntityWorldEvent::Destroy(self.get_direction())),
+            _ => (),
         }
     }
 
@@ -180,8 +122,8 @@ impl Player<'_> {
 
     pub fn respawn(&mut self) {
         let size = 50;
-        let (x,y) = (rand::gen_range(-size, size),rand::gen_range(-size, size));
-        self.pos = vec2(x as f32, y as f32);
+        let (x, y) = (rand::gen_range(-size, size), rand::gen_range(-size, size));
+        self.pos += vec2(x as f32, y as f32);
     }
 
     //used for multiplayer
@@ -229,12 +171,16 @@ impl Player<'_> {
         match self.keyframe {
             KeyFrame::Blocking(_, action) => match action {
                 BlockingAction::Attack => {
-                    self.cooldowns.insert(action, 1.);
+                    self.cooldowns.insert(action, ATTACK_COOLDOWN);
                 }
                 BlockingAction::Roll => {
                     self.cooldowns.insert(action, 1.);
                 }
-                BlockingAction::Dying => self.respawn(),
+                BlockingAction::Dying => {
+                    if self.local_player {
+                        self.respawn()
+                    }                    
+                },
                 _ => (),
             },
             KeyFrame::Free(_, _) => {}
@@ -259,14 +205,17 @@ impl Player<'_> {
             KeyFrame::Free(_, interaction) => interaction,
         };
 
+        let x = self.pos.x;
+        let y = self.pos.y;
+
+       
+
         match self.animations.get(&(interaction, self.direction)) {
             Some(texture_data) => {
                 let pixel_pos = texture_data
                     .texture_pos
                     .get(self.current_keyframe() as usize)
                     .unwrap();
-
-                
 
                 draw_texture_ex(
                     *self.textures,
@@ -289,9 +238,17 @@ impl Player<'_> {
                 draw_circle(self.pos.x, self.pos.y, 1., RED);
             }
         }
+
+        match self.cooldowns.get(&BlockingAction::Attack) {
+            Some(time) => {
+                let cooldown = (ATTACK_COOLDOWN-time)/ATTACK_COOLDOWN;
+                draw_rectangle(x-2., y+2., 4.*cooldown, 0.5, color_u8!(255,124,0,200));
+            },
+            None => (),
+        };
         if debug {
             draw_circle(self.pos.x, self.pos.y, 0.1, RED);
-            draw_circle_lines(self.pos.x,self.pos.y,2.5,0.1,RED);
+            draw_circle_lines(self.pos.x, self.pos.y, 2.5, 0.1, RED);
         }
 
         draw_text_ex(&self.name, self.pos.x + 1., self.pos.y - 2., *text_params);
@@ -304,7 +261,9 @@ impl Player<'_> {
     }
 }
 
-impl Entity for Player<'_> {
+
+
+impl WorldEntity for Player<'_> {
     fn get_velocity(&self) -> Vec2 {
         self.v
     }
@@ -320,14 +279,20 @@ impl Entity for Player<'_> {
     fn update(&mut self, tile_interaction: &TileInteraction, tile_action: &TileAction, time: f32) {
         let next_possible_interaction = match tile_interaction {
             TileInteraction::Block => Interaction::Idle,
-            TileInteraction::Walkable => Interaction::Walk,
+            TileInteraction::Walkable => {
+                if self.v.length() == 0. {
+                    Interaction::Idle
+                } else {
+                    Interaction::Walk
+                }
+            }
             TileInteraction::Swimmable => Interaction::Swim,
             TileInteraction::Crawl => Interaction::Walk,
         };
 
         match (self.keyframe, tile_action) {
             (KeyFrame::Free(_, _), TileAction::Death) => self.kill(),
-            _ => ()
+            _ => (),
         }
 
         let interaction = match self.keyframe {
@@ -337,8 +302,8 @@ impl Entity for Player<'_> {
 
         {
             let time = match (interaction, tile_interaction) {
-                (Interaction::Walk, TileInteraction::Crawl) => time*0.4,
-                _ => time
+                (Interaction::Walk, TileInteraction::Crawl) => time * 0.4,
+                _ => time,
             };
 
             //Keyframe timer
@@ -406,123 +371,10 @@ impl Entity for Player<'_> {
         }
     }
 
-    fn get_world_event(&mut self) -> WorldEvent {
+    fn get_world_event(&mut self) -> EntityWorldEvent {
         match self.world_events.pop() {
             Some(event) => event,
-            None => WorldEvent::None,
+            None => EntityWorldEvent::None,
         }
     }
-}
-
-pub struct Animation {
-    texture_pos: Vec<PixelPos>,
-    time_step: f32,
-}
-
-impl fmt::Display for Interaction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Interaction::Swim => write!(f, "swim"),
-            Interaction::Walk => write!(f, "walk"),
-            Interaction::Idle => write!(f, "idle"),
-            Interaction::Attack => write!(f, "attack"),
-            Interaction::Roll => write!(f, "roll"),
-            Interaction::Block => write!(f, "block"),
-            Interaction::Dying => write!(f, "death"),
-        }
-    }
-}
-
-impl fmt::Display for Direction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Direction::Up => write!(f, "up"),
-            Direction::Down => write!(f, "down"),
-            Direction::Left => write!(f, "left"),
-            Direction::Right => write!(f, "right"),
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct Spritesheet {
-    #[serde(rename = "frames")]
-    frames: HashMap<String, Frame>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct Frame {
-    #[serde(rename = "frame")]
-    pos: PixelPos,
-}
-
-#[derive(Debug, Deserialize, Serialize,Clone, Copy)]
-struct PixelPos {
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-}
-
-pub async fn load_textures() -> (Texture2D, HashMap<(Interaction, Direction), Animation>) {
-    let mut texture_map: HashMap<(Interaction, Direction), Animation> = HashMap::new();
-
-    let texture = load_texture("textures/spritesheet.png").await.unwrap();
-    texture.set_filter(FilterMode::Nearest);
-    let spritesheet = load_string("textures/spritesheet.json").await.unwrap();
-    let spritesheet: Spritesheet = serde_json::from_str(&spritesheet).unwrap();
-
-    for action in Interaction::iter() {
-        match action {
-            Interaction::Dying => {
-                for direction in Direction::iter() {
-                    let mut textures = Vec::new();
-                    for step in vec!["1", "2", "3", "4"] {
-                        let frame = spritesheet.frames.get(&format!("{}{}.png", action, step)).unwrap();
-                        textures.push(frame.pos);
-                    }
-                    texture_map.insert(
-                        (action, direction),
-                        Animation {
-                            texture_pos: textures,
-                            time_step: 0.3,
-                        },
-                    );
-                }
-            }
-            _ => {
-                for direction in Direction::iter() {
-                    let mut textures = Vec::new();
-                    let steps = match action {
-                        Interaction::Block => vec![""],
-                        _ => vec!["1", "2", "3", "4"],
-                    };
-                    for step in steps {
-                        let frame = spritesheet.frames.get(&format!("{} {}{}.png", action, direction, step)).unwrap();
-                        textures.push(frame.pos);
-                    }
-
-                    let time_step = match action {
-                        Interaction::Swim => 0.15,
-                        Interaction::Walk => 0.15,
-                        Interaction::Idle => 0.5,
-                        Interaction::Attack => 0.08,
-                        Interaction::Roll => 0.2,
-                        Interaction::Block => 1.,
-                        Interaction::Dying => 1.,
-                    };
-
-                    texture_map.insert(
-                        (action, direction),
-                        Animation {
-                            texture_pos: textures,
-                            time_step,
-                        },
-                    );
-                }
-            }
-        }
-    }
-
-   (texture, texture_map)
 }

@@ -1,9 +1,10 @@
-use crate::{controlls::ToggleControll, multiplayer::Event, player::load_textures};
+use crate::{controlls::ToggleControll, multiplayer::Event};
 use controlls::{Controll, Controller};
 use macroquad::prelude::*;
 use macroquad_virtual_joystick::{Joystick, JoystickDirection};
 use multiplayer::MultiplayerHandler;
-use player::{Entity, Player};
+use player::{Player, animation::load_textures};
+use world::{*, entity::*, tile::*};
 // use quad_url::*;
 use std::collections::HashMap;
 use touchbutton::Button;
@@ -22,8 +23,6 @@ extern crate lazy_static;
 pub mod wasm;
 #[cfg(target_arch = "wasm32")]
 use crate::wasm::WasmEventHandler;
-
-use crate::world::World;
 
 #[cfg(target_arch = "wasm32")]
 fn get_multiplayer_handler() -> Box<dyn MultiplayerHandler> {
@@ -343,8 +342,8 @@ async fn main() {
             set_default_camera();
             draw_text("WASD to move player", 10.0, 30.0, 30.0, BLACK);
             draw_text("Q-E to zoom camera", 10.0, 60.0, 30.0, BLACK);
-            draw_text("LeftShift to roll", 10.0, 90.0, 30.0, BLACK);
-            draw_text("Space to swing sword", 10.0, 120.0, 30.0, BLACK);
+            draw_text("Space to roll", 10.0, 90.0, 30.0, BLACK);
+            draw_text("J to swing sword", 10.0, 120.0, 30.0, BLACK);
             draw_text("M to open map", 10.0, 150.0, 30.0, BLACK);
             draw_text(
                 &format!(
@@ -518,7 +517,7 @@ fn handle_debug_player(
     multiplayer_handler: &mut Box<dyn MultiplayerHandler>,
 ) {
     if controller.is_enabled(ToggleControll::SecondaryPlayer) {
-        player2.update(&world::TileInteraction::Walkable, &world::TileAction::None, get_frame_time());
+        player2.update(&TileInteraction::Walkable, &TileAction::None, get_frame_time());
         let speed = 20.;
         let mut velocity = vec2(0., 0.);
         if controller.is(Controll::MoveSecondaryRight) {

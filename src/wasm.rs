@@ -5,7 +5,7 @@ use std::{collections::VecDeque, sync::Mutex};
 use crate::multiplayer::Event;
 use crate::multiplayer::MultiplayerHandler;
 use crate::player::BlockingAction;
-use crate::player::Direction;
+use crate::world::entity::Direction;
 
 #[derive(Debug, Clone, Copy)]
 struct ThisPlayerData {
@@ -88,14 +88,14 @@ pub extern "C" fn get_upstream_event() -> JsObject {
                 };
 
                 let direction = match direction {
-                    crate::player::Direction::Up => 8.,
-                    crate::player::Direction::Down => 2.,
-                    crate::player::Direction::Left => 4.,
-                    crate::player::Direction::Right => 6.,
+                    crate::world::entity::Direction::Up => 8,
+                    crate::world::entity::Direction::Down => 2,
+                    crate::world::entity::Direction::Left => 4,
+                    crate::world::entity::Direction::Right => 6,
                 };
 
                 js_object.set_field_f32("action", action);
-                js_object.set_field_f32("direction", direction);
+                js_object.set_field_f32("direction", direction as f32);
                 js_object.set_field_f32("x", x);
                 js_object.set_field_f32("y", y);
                 js_object

@@ -1,6 +1,6 @@
 use macroquad::prelude::Vec2;
 
-use crate::player::{BlockingAction, Direction};
+use crate::{player::{BlockingAction}, world::entity::Direction};
 
 #[derive(Debug)]
 pub enum Event {
